@@ -108,7 +108,7 @@ jobs:
       run: nuget restore "Data Logger/Data Logger.sln" -SolutionDirectory "Data Logger" 
 
     - name: Build Test Project
-      run: msbuild "DataLogger.Tests/DataLogger.Tests.csproj" /p:Configuration=Release /p:Platform="Any CPU"
+      run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
 
     - name: Start OPC UA Reference Server in Docker
       shell: pwsh
