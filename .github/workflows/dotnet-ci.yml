@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main, develop ]
   pull_request:
-    branches: [ main, develop ] 
+    branches: [ main, develop ]
   workflow_dispatch:
 
 jobs:
@@ -70,30 +70,29 @@ jobs:
 
   integration-tests:
     name: Integration Tests
-    runs-on: ubuntu-latest # Belangrijk: Gebruik een Linux runner
+    runs-on: ubuntu-latest # Cruciaal: Linux runner!
     container:
       image: ghcr.io/opcfoundation/uanetstandard/refserver:latest
       ports:
-        - 62541:62541
+        - 62541:62541 # Exposeer de poort
       volumes:
-        - ${{ github.workspace }}/DataLogger.Tests/ReferenceServerFiles/OPC Foundation:/root/.local/share/OPC Foundation
-      options: --privileged
+        - ${{ github.workspace }}/DataLogger.Tests/ReferenceServerFiles/OPC Foundation:/root/.local/share/OPC Foundation # Mount het volume
+      options: --privileged # Mogelijk nodig voor sommige Docker operaties
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Integration Tests
-        shell: pwsh
-        run: |
-          # Install .NET Core SDK (of een andere geschikte runtime)
-          # Dit is een voorbeeld, pas aan aan jouw behoeften
-          # apt-get update
-          # apt-get install -y dotnet-sdk-6.0
-          # export DOTNET_ROOT=/usr/share/dotnet
-          # export PATH=$PATH:$DOTNET_ROOT
-          # dotnet --info
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.417' # Of een andere LTS versie (check https://dotnet.microsoft.com/download/dotnet)
 
-          # VSTest via dotnet test gebruiken (eenvoudiger dan vstest.console.exe)
+      - name: Run Integration Tests
+        shell: bash # Gebruik bash (ipv sh)
+        run: |
+          dotnet --info # Debug info
+
+          # VSTest via dotnet test gebruiken
           $testDllPath = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll"
           $integrationTestFilter = '/TestCaseFilter:"TestCategory=IntegrationTest"'
           $integrationTestResultFile = "integration_test_results.trx"
