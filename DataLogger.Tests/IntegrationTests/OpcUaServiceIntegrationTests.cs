@@ -67,7 +67,7 @@ namespace DataLogger.Tests.IntegrationTests
                 TestContext.Progress.WriteLine(
                     "CI Environment: Wacht 10 seconden voor de service container om potentieel op te starten..."
                 );
-                Thread.Sleep(10000);
+                Thread.Sleep(240000);
             }
             else
             {
