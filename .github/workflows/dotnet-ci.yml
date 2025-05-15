@@ -64,7 +64,7 @@ jobs:
         
         $testDllPath = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" # Pas dit pad aan!
 
-        $testFilter = "/TestCaseFilter:\"TestCategory!=IntegrationTest\""
+        $testFilter = '/TestCaseFilter:"TestCategory!=IntegrationTest"'
 
         $resultFile = "unit_test_results.trx"
 
