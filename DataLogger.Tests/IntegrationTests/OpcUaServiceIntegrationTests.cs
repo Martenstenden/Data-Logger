@@ -26,7 +26,7 @@ namespace DataLogger.Tests.IntegrationTests
     {
         private const string ReferenceServerImage =
             "ghcr.io/opcfoundation/uanetstandard/refserver:latest";
-        private const string TestOpcUaEndpoint =
+        private const string DefaultLocalOpcUaEndpoint =
             "opc.tcp://localhost:62541/Quickstarts/ReferenceServer";
         
         private ILogger _testLogger;
@@ -34,57 +34,40 @@ namespace DataLogger.Tests.IntegrationTests
         private ApplicationConfiguration _clientAppConfigForTest;
 
         [OneTimeSetUp]
-        public void GlobalSetup()
+public void GlobalSetup()
+{
+    if (Environment.GetEnvironmentVariable("CI_ENVIRONMENT") == "true")
+    {
+        TestContext.Progress.WriteLine("CI Environment: Docker container wordt beheerd door GitHub Actions Service. Overslaan DockerTestHelper.StartReferenceServerContainer().");
+        // Wacht eventueel even om de service container de tijd te geven volledig op te starten.
+        // Dit is soms nodig, hoewel GitHub Actions probeert te wachten tot poorten beschikbaar zijn.
+        Thread.Sleep(15000); // 15 seconden, pas aan indien nodig of maak dit intelligenter.
+    }
+    else
+    {
+        TestContext.Progress.WriteLine("Local Environment: Starten van OPC UA Reference Server via DockerTestHelper...");
+        // ... (je bestaande DockerTestHelper.StartReferenceServerContainer() logica) ...
+        // Zorg ervoor dat DockerTestHelper.DockerContainerName hier uniek is per testrun als je lokaal draait.
+        // En dat TestOpcUaEndpoint hier ook lokaal correct is.
+        string hostSideVolumeBase = Path.Combine(TestContext.CurrentContext.WorkDirectory, "ReferenceServerFiles");
+        string hostSideOpcFoundationDir = Path.Combine(hostSideVolumeBase, "OPC Foundation");
+        Directory.CreateDirectory(hostSideOpcFoundationDir);
+        string containerSidePkiPath = "/root/.local/share/OPC Foundation";
+        string hostPathForVolume = Path.GetFullPath(hostSideOpcFoundationDir).Replace('\\', '/');
+        string volumeMapping = $"{hostPathForVolume}:{containerSidePkiPath}";
+        string serverArgs = "-a -c -s"; // Je bestaande argumenten
+
+        // De image naam en poort mapping zijn hier hardcoded, overweeg deze ook configureerbaar te maken.
+        if (!DockerTestHelper.StartReferenceServerContainer(
+                "ghcr.io/opcfoundation/uanetstandard/refserver:latest", // Image naam
+                "62541:62541",      // Port mapping
+                volumeMapping,
+                serverArgs))
         {
-            TestContext.Progress.WriteLine(
-                "GlobalSetup: Starten van OPC UA Reference Server via Docker..."
-            );
-            if (!DockerTestHelper.IsDockerRunning())
-            {
-                Assert.Inconclusive("Docker service draait niet. Sla integratietests over.");
-                return;
-            }
-            string hostSideVolumeBase = Path.Combine(
-                TestContext.CurrentContext.WorkDirectory,
-                "ReferenceServerFiles"
-            );
-            string hostSideOpcFoundationDir = Path.Combine(hostSideVolumeBase, "OPC Foundation");
-            Directory.CreateDirectory(hostSideOpcFoundationDir);
-            string containerSidePkiPath = "/root/.local/share/OPC Foundation";
-
-            string hostPathForVolume = Path.GetFullPath(hostSideOpcFoundationDir)
-                .Replace('\\', '/');
-            string volumeMapping = $"{hostPathForVolume}:{containerSidePkiPath}";
-
-            string serverArgs = "-a -c -s";
-            DockerTestHelper.DockerContainerName =
-                $"integration-test-refserver-{Guid.NewGuid().ToString().Substring(0, 8)}";
-
-            if (
-                !DockerTestHelper.StartReferenceServerContainer(
-                    ReferenceServerImage,
-                    "62541:62541",
-                    volumeMapping,
-                    serverArgs
-                )
-            )
-            {
-                DockerTestHelper.RunDockerCommand(
-                    $"logs {DockerTestHelper.DockerContainerName}",
-                    TimeSpan.FromSeconds(10),
-                    ignoreErrors: true
-                );
-                Assert.Fail(
-                    $"Kon de OPC UA Reference Server Docker container '{DockerTestHelper.DockerContainerName}' niet starten of server logde niet 'Server started'. Controleer Docker output en test logs."
-                );
-            }
-            TestContext.Progress.WriteLine(
-                $"OPC UA Reference Server via Docker (Container: {DockerTestHelper.DockerContainerName}) is gestart en 'Server started.' bericht is gedetecteerd."
-            );
-            TestContext.Progress.WriteLine(
-                $"Server bestanden (PKI, logs, shadow config) worden gemapt naar host map: {Path.GetFullPath(hostSideOpcFoundationDir)}"
-            );
+            Assert.Fail("Kon DockerTestHelper OPC UA server niet starten voor lokale testrun.");
         }
+    }
+}
 
         [Test]
         public void SimplestPossibleTest()
@@ -96,10 +79,15 @@ namespace DataLogger.Tests.IntegrationTests
         [OneTimeTearDown]
         public void GlobalTeardown()
         {
-            TestContext.Progress.WriteLine(
-                "GlobalTeardown: Stoppen van OPC UA Reference Server Docker container..."
-            );
-            DockerTestHelper.StopAndRemoveReferenceServerContainer();
+            if (Environment.GetEnvironmentVariable("CI_ENVIRONMENT") == "true")
+            {
+                TestContext.Progress.WriteLine("CI Environment: Docker container wordt beheerd door GitHub Actions Service. Overslaan DockerTestHelper.StopAndRemoveReferenceServerContainer().");
+            }
+            else
+            {
+                TestContext.Progress.WriteLine("Local Environment: Stoppen van OPC UA Reference Server via DockerTestHelper...");
+                DockerTestHelper.StopAndRemoveReferenceServerContainer();
+            }
         }
 
         [SetUp]
@@ -174,6 +162,19 @@ namespace DataLogger.Tests.IntegrationTests
                 "Voorwaarde: Docker en Reference Server container draaien."
             );
         }
+        
+        private string GetTestOpcUaEndpoint()
+        {
+            string ciEndpoint = Environment.GetEnvironmentVariable("OPCUA_TEST_SERVER_ENDPOINT");
+            if (!string.IsNullOrEmpty(ciEndpoint) && Environment.GetEnvironmentVariable("CI_ENVIRONMENT") == "true")
+            {
+                TestContext.Progress.WriteLine($"CI Environment: Gebruik OPC UA endpoint van env var: {ciEndpoint}");
+                return ciEndpoint;
+            }
+            TestContext.Progress.WriteLine($"Local Environment: Gebruik hardcoded OPC UA endpoint: {DefaultLocalOpcUaEndpoint}");
+            return DefaultLocalOpcUaEndpoint; // Je bestaande lokale endpoint URL
+        }
+
 
         [Test, Order(1)]
         public async Task ConnectAndDisconnect_ToRefServer_ShouldSucceed()
@@ -186,7 +187,7 @@ namespace DataLogger.Tests.IntegrationTests
             var connectionConfig = new OpcUaConnectionConfig
             {
                 ConnectionName = "TestRefServerConnectDisconnect",
-                EndpointUrl = TestOpcUaEndpoint,
+                EndpointUrl = GetTestOpcUaEndpoint(),
                 SecurityMode = MessageSecurityMode.None,
                 SecurityPolicyUri = SecurityPolicies.None,
                 IsEnabled = true,
@@ -196,7 +197,7 @@ namespace DataLogger.Tests.IntegrationTests
             bool connected = false;
             try
             {
-                TestContext.Progress.WriteLine($"Proberen te verbinden met {TestOpcUaEndpoint}...");
+                TestContext.Progress.WriteLine($"Proberen te verbinden met {GetTestOpcUaEndpoint()}...");
                 connected = await opcUaService.ConnectAsync();
                 TestContext.Progress.WriteLine($"Verbindingsresultaat: {connected}");
             }
@@ -230,7 +231,7 @@ namespace DataLogger.Tests.IntegrationTests
 
             var connectionConfig = new OpcUaConnectionConfig
             {
-                EndpointUrl = TestOpcUaEndpoint,
+                EndpointUrl = GetTestOpcUaEndpoint(),
                 SecurityMode = MessageSecurityMode.None,
                 SecurityPolicyUri = SecurityPolicies.None,
             };
@@ -289,7 +290,7 @@ namespace DataLogger.Tests.IntegrationTests
             var connectionConfig = new OpcUaConnectionConfig
             {
                 ConnectionName = "TestMonitorConnection",
-                EndpointUrl = TestOpcUaEndpoint,
+                EndpointUrl = GetTestOpcUaEndpoint(),
                 SecurityMode = MessageSecurityMode.None,
                 SecurityPolicyUri = SecurityPolicies.None,
                 TagsToMonitor = new ObservableCollection<OpcUaTagConfig> { tagConfig },
