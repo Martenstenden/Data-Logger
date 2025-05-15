@@ -99,6 +99,7 @@ jobs:
       run: docker pull ghcr.io/opcfoundation/uanetstandard/refserver:latest
 
     - name: Run Integration Tests (requires Docker)
+      if: runner.os != 'Windows'
       shell: pwsh
       run: |
         # $vstestPath zou nog steeds moeten zijn ingesteld vanuit de vorige PowerShell run stap
