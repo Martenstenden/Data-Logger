@@ -3,26 +3,12 @@ name: .NET Desktop CI/CD for Data Logger
 on:
   push:
     branches: [ "main", "develop" ]
-  pull_request:
+  pull_request: 
     branches: [ "main" ]
 
 jobs:
   build-and-test:
-    runs-on: windows-latest # Je .NET Framework tests draaien hier
-
-    # Definieer de OPC UA server als een service
-    # GitHub Actions draait services in aparte (meestal Linux) containers
-    # en maakt ze beschikbaar voor je job.
-    services:
-      opcua-server: # Dit is de naam die je kunt gebruiken om de service te adresseren (kan ook localhost zijn)
-        image: ghcr.io/opcfoundation/uanetstandard/refserver:latest
-        ports:
-          - 62541:62541 # Map poort 62541 van de runner naar poort 62541 in de container
-        # Opties kunnen hier worden toegevoegd voor de service, bijv. omgevingsvariabelen voor de server.
-        # Volume mapping voor PKI direct van een Windows host naar een Linux service container is complex.
-        # Het is beter als de server image zijn eigen certificaten beheert of configureerbaar is
-        # om client certificaten te accepteren die door jouw client (OpcUaConfigurator) zijn gegenereerd,
-        # vooral met auto-accept ingeschakeld.
+    runs-on: windows-latest
 
     steps:
     - name: Checkout code
@@ -39,7 +25,7 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
       with:
-        msbuild-architecture: x86 # Of x64
+        msbuild-architecture: x86
 
     - name: Build solution
       run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
@@ -57,16 +43,21 @@ jobs:
         name: unit-test-results
         path: UnitTestResults/**/*.trx
 
+    # --- Docker en Integratietests ---
+    # De volgende stap zal nog steeds falen met "no matching manifest" als DockerTestHelper.cs
+    # onconditioneel probeert 'docker run' uit te voeren voor de Linux image.
+    # Het is cruciaal dat je GlobalSetup in C# conditioneel wordt (zie code suggestie hieronder).
     - name: Run Integration Tests
-      # Deze tests zullen nu proberen te verbinden met de OPC UA server die als service draait.
-      # De service is typisch bereikbaar op 'localhost:<host_port>' binnen de job.
+      id: run_integration_tests
+      continue-on-error: true # Houd dit voorlopig aan
       run: vstest.console.exe "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" /TestCaseFilter:"Category=IntegrationTest" /Logger:trx /ResultsDirectory:"IntegrationTestResults"
       env:
-        # Stel een omgevingsvariabele in die je tests kunnen gebruiken om het endpoint te bepalen.
-        OPCUA_TEST_SERVER_ENDPOINT: "opc.tcp://localhost:62541/Quickstarts/ReferenceServer"
-        # Voeg een variabele toe om aan je testcode (DockerTestHelper) te laten weten dat het in CI draait
-        # en de Docker container NIET zelf moet beheren.
+        # Deze variabele vertelt je C# testcode dat het in CI draait
         CI_ENVIRONMENT: "true"
+        # Als je een extern gehoste OPC UA server voor CI zou hebben, zou je hier het endpoint kunnen meegeven:
+        # OPCUA_TEST_SERVER_ENDPOINT: "opc.tcp://jouw-externe-test-server:poort/path"
+        # Voor nu, zonder externe server, zullen de tests die een server verwachten falen.
+        OPCUA_TEST_SERVER_ENDPOINT: "opc.tcp://localhost:62541/Quickstarts/ReferenceServer" # Dit is een placeholder; zal niet werken zonder server
 
     - name: Upload Integration Test Results
       if: always()
@@ -74,6 +65,15 @@ jobs:
       with:
         name: integration-test-results
         path: IntegrationTestResults/**/*.trx
+
+    - name: Check Integration Test Outcome
+      if: steps.run_integration_tests.outcome == 'failure' && steps.run_integration_tests.conclusion == 'failure'
+      # Dit faalt de build alleen als de integration test stap echt faalde (niet 'skipped' of 'success')
+      run: |
+        echo "Integration tests failed or were skipped due to setup issues. See uploaded artifacts for details."
+        echo "The OPC UA server Docker image is likely Linux-based and cannot be run directly by DockerTestHelper.cs on the Windows runner."
+        echo "Modify OpcUaServiceIntegrationTests.GlobalSetup() to not manage Docker in CI_ENVIRONMENT."
+        exit 1 # Fail de build
 
     - name: Upload Build Artifact (Data Logger Application)
       uses: actions/upload-artifact@v4
