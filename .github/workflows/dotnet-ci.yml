@@ -68,7 +68,7 @@ jobs:
         name: unit-test-results-framework
         path: unit_test_results.trx
 
-  build-test-image:
+  build-test-image: # Nieuwe job om de Docker image te bouwen
     name: Build Test Image
     runs-on: ubuntu-latest
     steps:
@@ -77,15 +77,15 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t my-test-image:latest -f Dockerfile.test 
+          docker build -t my-test-image:latest -f Dockerfile.test .  # Correcte docker build opdracht
           docker push my-test-image:latest # Of een ander registry
 
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
-    needs: build-test-image 
+    needs: build-test-image # Wacht tot de image is gebouwd
     container:
-      image: my-test-image:latest
+      image: my-test-image:latest # Gebruik je aangepaste image
       ports:
         - 62541:62541
       volumes:
@@ -94,6 +94,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.417' # Of een andere LTS versie
 
       - name: Run Integration Tests
         shell: bash
