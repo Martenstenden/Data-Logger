@@ -14,23 +14,72 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    - name: Setup .NET SDK
-      uses: actions/setup-dotnet@v3
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v1
       with:
-        dotnet-version: '4.8.1' 
+        nuget-version: 'latest'
 
-    - name: Restore dependencies
-      run: dotnet restore
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v1.1
 
-    - name: Build solution
-      run: dotnet build --configuration Release --no-restore
+    - name: Restore NuGet packages for Solution
+      run: nuget restore Data_Logger.sln
 
-    - name: Run Unit Tests
-      run: dotnet test --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=unit_test_results.trx" --filter "FullyQualifiedName!~IntegrationTests" 
+    - name: Build Solution with MSBuild
+      run: msbuild Data_Logger.sln /p:Configuration=Release /p:Platform="Any CPU"
 
-    - name: Upload Unit Test Results (Optioneel)
+    - name: Run Unit Tests with VSTest.Console
+      run: |
+        $vstestPath = Get-Command vstest.console.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+        if (-not $vstestPath) {
+            # Fallback paden als Get-Command het niet direct vindt
+            $vsInstallPaths = @(
+                "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions\TestPlatform",
+                "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Professional\Common7\IDE\Extensions\TestPlatform",
+                "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Community\Common7\IDE\Extensions\TestPlatform",
+                "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions\TestPlatform",
+                "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional\Common7\IDE\Extensions\TestPlatform",
+                "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\Common7\IDE\Extensions\TestPlatform",
+                # Voeg eventueel paden voor VS 2019 toe als fallback
+                "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Enterprise\Common7\IDE\CommonExtensions\Microsoft\TestWindow",
+                "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Professional\Common7\IDE\CommonExtensions\Microsoft\TestWindow",
+                "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\TestWindow"
+            )
+            foreach ($path in $vsInstallPaths) {
+                $testExe = Join-Path $path "vstest.console.exe"
+                if (Test-Path $testExe) {
+                    $vstestPath = $testExe
+                    break
+                }
+            }
+        }
+        
+        if (-not $vstestPath) {
+            Write-Error "VSTest.Console.exe niet gevonden. Controleer de paden of installeer 'Microsoft.TestPlatform' NuGet-pakket in testproject en probeer 'dotnet test'."
+            exit 1
+        }
+
+        Write-Host "VSTest.Console.exe gevonden op: $vstestPath"
+        
+        # Pad naar je test DLL
+        $testDllPath = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" # Pas dit pad aan!
+        # Filter om integratietests uit te sluiten
+        $testFilter = "/TestCaseFilter:\"TestCategory!=IntegrationTest\""
+        # Output voor testresultaten
+        $resultFile = "unit_test_results.trx"
+
+        Write-Host "Test DLL Pad: $testDllPath"
+        Write-Host "Filter: $testFilter"
+        Write-Host "Resultaat Bestand: $resultFile"
+
+        # Voer VSTest.Console.exe uit
+        # Het kan zijn dat je /UseVsixExtensions:true /Platform:x64 (of x86) moet toevoegen
+        & $vstestPath $testDllPath /Logger:"trx;LogFileName=$resultFile" $testFilter /EnableCodeCoverage /InIsolation
+      shell: pwsh
+
+    - name: Upload Unit Test Results
       if: always()
       uses: actions/upload-artifact@v4
       with:
