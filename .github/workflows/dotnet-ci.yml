@@ -1,123 +1,91 @@
-name: .NET Framework CI/CD for Data Logger
+name: .NET Desktop CI/CD for Data Logger
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ "main", "develop" ] # Triggert op push naar main en develop branches
   pull_request:
-    branches: [ main, develop ]
-  workflow_dispatch:
+    branches: [ "main" ] # Triggert op pull requests naar de main branch
 
 jobs:
   build-and-test:
-    name: Build & Test (.NET Framework)
-    runs-on: windows-latest
+    runs-on: windows-latest # Gebruik een Windows runner voor .NET Framework projecten
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
     - name: Setup NuGet
-      uses: NuGet/setup-nuget@v1
+      uses: NuGet/setup-nuget@v2
       with:
-        nuget-version: 'latest'
-
-    - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v1.1
+        nuget-version: 'latest' # Gebruik de laatste stabiele versie van NuGet
 
     - name: Restore NuGet packages
-      run: nuget restore "Data Logger/Data Logger.sln" -SolutionDirectory "Data Logger"
+      run: nuget restore "Data Logger.sln" # Herstel packages voor de gehele solution
 
-    - name: Build Solution
-      run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+      with:
+        msbuild-architecture: x86 # Of x64, afhankelijk van je project target
+
+    - name: Build solution
+      run: msbuild "Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU" # Bouw de solution in Release configuratie
+
+    - name: Setup VSTest
+      uses: darenm/Setup-VSTest@v1.2 # Action om VSTest.console.exe makkelijk beschikbaar te maken
 
     - name: Run Unit Tests
-      shell: pwsh
-      run: |
-        $vstestPaths = @(
-            "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/Common7/IDE/Extensions/TestPlatform/vstest.console.exe",
-            "C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/Extensions/TestPlatform/vstest.console.exe",
-            "C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/Extensions/TestPlatform/vstest.console.exe",
-            "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/Common7/IDE/CommonExtensions/Microsoft/TestWindow/vstest.console.exe",
-            "C:/Program Files/Microsoft Visual Studio/2022/Professional/Common7/IDE/CommonExtensions/Microsoft/TestWindow/vstest.console.exe",
-            "C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/TestWindow/vstest.console.exe"
-        )
-        $vstestPath = $vstestPaths | Where-Object { Test-Path $_ -PathType Leaf } | Select-Object -First 1
-
-        if (-not $vstestPath) {
-            Write-Error "VSTest.Console.exe niet gevonden."
-            $vstestPath = (where.exe vstest.console.exe | Select-Object -First 1)
-            if (-not $vstestPath) {
-                 Write-Error "VSTest.Console.exe ook niet gevonden via where.exe. Zorg dat Visual Studio Test Platform is geïnstalleerd."
-                 exit 1
-            }
-        }
-        Write-Host "VSTest.Console.exe gevonden op: $vstestPath"
-
-        $testDllPath = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll"
-        $unitTestFilter = '/TestCaseFilter:"TestCategory!=IntegrationTest"'
-        $unitTestResultFile = "unit_test_results.trx"
-
-        Write-Host "Unit Test DLL Pad: $testDllPath"
-        Write-Host "Unit Test Filter: $unitTestFilter"
-        & $vstestPath $testDllPath /Logger:"trx;LogFileName=$unitTestResultFile" $unitTestFilter /EnableCodeCoverage /InIsolation
+      run: vstest.console.exe "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" /Logger:trx /ResultsDirectory:"TestResults"
+      # Pas het pad naar DataLogger.Tests.dll aan indien nodig na de build.
+      # Deze stap faalt de workflow als er tests falen.
 
     - name: Upload Unit Test Results
-      if: always()
+      if: always() # Upload altijd, ook als tests falen, voor analyse
       uses: actions/upload-artifact@v4
       with:
-        name: unit-test-results-framework
-        path: unit_test_results.trx
+        name: unit-test-results
+        path: TestResults/**/*.trx
 
-  build-test-image: # Nieuwe job om de Docker image te bouwen
-    name: Build Test Image
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # --- Integratietests met Docker ---
+    # Deze stappen vereisen dat Docker correct werkt op de GitHub runner
+    # en dat je DockerTestHelper.cs de container correct kan beheren.
+    - name: Check Docker version (for debugging)
+      run: docker --version
 
-      - name: Build Docker image
-        run: |
-          docker build -t my-test-image:latest -f DataLogger.Tests/Docker/Dockerfile.test .  # Aangepast pad!
-          docker push my-test-image:latest # Of een ander registry
+    - name: Check Docker is running (for debugging)
+      run: docker ps
+      continue-on-error: true # Voor het geval Docker daemon niet direct reageert
 
-  integration-tests:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: build-test-image # Wacht tot de image is gebouwd
-    container:
-      image: my-test-image:latest # Gebruik je aangepaste image
-      ports:
-        - 62541:62541
-      volumes:
-        - ${{ github.workspace }}/DataLogger.Tests/ReferenceServerFiles/OPC Foundation:/root/.local/share/OPC Foundation
-      options: --privileged
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Run Integration Tests
+      # Deze stap is complexer vanwege de Docker afhankelijkheid.
+      # Je DockerTestHelper.cs zal proberen de container te starten.
+      # Zorg dat de image 'ghcr.io/opcfoundation/uanetstandard/refserver:latest' publiek toegankelijk is.
+      run: vstest.console.exe "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" /TestCaseFilter:"Category=IntegrationTest" /Logger:trx /ResultsDirectory:"IntegrationTestResults"
+      # Gebruik /TestCaseFilter als je tests hebt gecategoriseerd (bijv. [Category("IntegrationTest")] in NUnit).
+      # Als je geen categorieën hebt, en alle tests in DataLogger.Tests.dll zijn integratietests,
+      # kun je de /TestCaseFilter weglaten, maar het is best practice om ze te scheiden.
+      # Deze stap faalt de workflow als er tests falen.
+      # `continue-on-error: true` kan hier tijdelijk gebruikt worden tijdens het debuggen van de Docker setup.
 
-      - name: Install .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '6.0.417' # Of een andere LTS versie
+    - name: Upload Integration Test Results
+      if: always() # Upload altijd, ook als tests falen, voor analyse
+      uses: actions/upload-artifact@v4
+      with:
+        name: integration-test-results
+        path: IntegrationTestResults/**/*.trx
 
-      - name: Run Integration Tests
-        shell: bash
-        run: |
-          dotnet --info # Debug info
-
-          $testDllPath = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll"
-          $integrationTestFilter = '/TestCaseFilter:"TestCategory=IntegrationTest"'
-          $integrationTestResultFile = "integration_test_results.trx"
-
-          Write-Host "Integration Test DLL Pad: $testDllPath"
-          Write-Host "Integration Test Filter: $integrationTestFilter"
-
-          dotnet test $testDllPath --logger:"trx;LogFileName=$integrationTestResultFile" --filter $integrationTestFilter
-        timeout-minutes: 10
-
-      - name: Upload Integration Test Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: integration-test-results
-          path: integration_test_results.trx
+    - name: Upload Build Artifact (Data Logger Application)
+      uses: actions/upload-artifact@v4
+      with:
+        name: data-logger-application
+        path: | # Lijst van paden naar de artefacten
+          Data Logger/bin/Release/**/*.exe
+          Data Logger/bin/Release/**/*.dll
+          Data Logger/bin/Release/**/*.config
+          Data Logger/bin/Release/Logs # Optioneel, als je de standaard logmap wilt meenemen
+          Data Logger/bin/Release/LoggedData # Optioneel
+          Data Logger/bin/Release/CertificateStores # Belangrijk voor OPC UA
+        # Exclude test adapters en andere onnodige bestanden
+        # path-exclude: |
+        #   **/*testadapter*
+        #   **/*.pdb
+        #   **/*.xml # Tenzij je XML documentatie bestanden wilt deployen
