@@ -3,7 +3,7 @@ name: .NET Desktop CI/CD for Data Logger
 on:
   push:
     branches: [ "main", "develop" ]
-  pull_request:
+  pull_request: 
     branches: [ "main" ]
 
 jobs:
