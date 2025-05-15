@@ -9,6 +9,7 @@ using Serilog;
 namespace DataLogger.Tests
 {
     [TestFixture]
+    [Category("Unit")]
     public class ModbusDataConverterTests
     {
         private Mock<ILogger> _mockLogger;

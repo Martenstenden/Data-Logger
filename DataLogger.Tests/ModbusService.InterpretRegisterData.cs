@@ -8,6 +8,7 @@ using NUnit.Framework.Legacy;
 using Serilog;
 
 [TestFixture]
+[Category("Unit")]
 public class ModbusServiceTests
 {
     private Mock<ILogger> _mockLogger;

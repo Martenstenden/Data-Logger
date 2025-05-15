@@ -11,6 +11,7 @@ namespace DataLogger.Tests
     using Serilog;
 
     [TestFixture]
+    [Category("Unit")]
     public class OpcUaTagConfigTests
     {
         private Mock<ILogger> _mockLogger;

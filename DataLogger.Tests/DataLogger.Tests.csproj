@@ -175,7 +175,6 @@
     <Compile Include="ModbusDataConverterTests.cs" />
     <Compile Include="ModbusService.InterpretRegisterData.cs" />
     <Compile Include="OpcUaTagConfigTests.cs" />
-    <Compile Include="UnitTest1.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
