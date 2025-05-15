@@ -67,7 +67,7 @@ namespace DataLogger.Tests.IntegrationTests
                 TestContext.Progress.WriteLine(
                     "CI Environment: Wacht 10 seconden voor de service container om potentieel op te starten..."
                 );
-                Thread.Sleep(240000);
+                Thread.Sleep(10);
             }
             else
             {
@@ -169,8 +169,7 @@ namespace DataLogger.Tests.IntegrationTests
                 addAppCertToTrustedStore: true,
                 createClientCertificateIfNeeded: true,
                 certificateKeySize: 2048,
-                certificateLifetimeInMonths: 1,
-                logger: _testLogger
+                certificateLifetimeInMonths: 1
             );
 
             if (_clientAppConfigForTest == null)
