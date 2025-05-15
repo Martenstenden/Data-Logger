@@ -1,0 +1,9 @@
+﻿<Application
+    x:Class="Data_Logger.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:converters1="clr-namespace:Data_Logger.Converters"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <converters1:BooleanToConnectionStatusConverter x:Key="BooleanToConnectionStatusConverter" xmlns:converters="clr-namespace:Data_Logger.Converters" />
+    </Application.Resources>
+</Application>

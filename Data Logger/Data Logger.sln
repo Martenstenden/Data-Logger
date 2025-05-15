@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35931.197 d17.13
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Data Logger", "Data Logger.csproj", "{E7C8292E-D65E-407E-A3E4-EC938252A22E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DataLogger.Tests", "..\DataLogger.Tests\DataLogger.Tests.csproj", "{B2C27637-B053-4852-B0F9-416E3CBF79EB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E7C8292E-D65E-407E-A3E4-EC938252A22E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E7C8292E-D65E-407E-A3E4-EC938252A22E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E7C8292E-D65E-407E-A3E4-EC938252A22E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E7C8292E-D65E-407E-A3E4-EC938252A22E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B2C27637-B053-4852-B0F9-416E3CBF79EB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B2C27637-B053-4852-B0F9-416E3CBF79EB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B2C27637-B053-4852-B0F9-416E3CBF79EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B2C27637-B053-4852-B0F9-416E3CBF79EB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3EED934C-2A10-4BD7-A2AC-FA8D01D1C0EB}
+	EndGlobalSection
+EndGlobal

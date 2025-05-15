@@ -1,0 +1,60 @@
+﻿<Window x:Class="Data_Logger.Views.BrowseOpcUaNodesView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        mc:Ignorable="d"
+        Title="BrowseOpcUaNodesView" Height="450" Width="800">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <RowDefinition Height="*"/>   <RowDefinition Height="Auto"/> </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,5">
+            <Button Content="Omhoog" Command="{Binding GoUpCommand}" MinWidth="70" Margin="0,0,10,0"/>
+            <TextBlock Text="{Binding CurrentBrowsePathDisplay}" VerticalAlignment="Center" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+        </StackPanel>
+        
+        <ListView Grid.Row="1" x:Name="NodesListView"
+                  ItemsSource="{Binding CurrentNodes}" 
+                  SelectedItem="{Binding SelectedNodeInView}" 
+                  SelectionMode="Single" Margin="0,0,0,5"
+                  HorizontalContentAlignment="Stretch">
+            <ListView.InputBindings>
+                <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding BrowseDeeperCommand}" CommandParameter="{Binding SelectedItem, ElementName=NodesListView}"/>
+            </ListView.InputBindings>
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding NodeClass}" Value="Variable">
+                            <Setter Property="FontWeight" Value="Bold"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Naam" Width="*">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding DisplayName}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="NodeClass" DisplayMemberBinding="{Binding NodeClass}" Width="100"/>
+                    <GridViewColumn Header="NodeId" DisplayMemberBinding="{Binding NodeId}" Width="200"/>
+                </GridView>
+            </ListView.View>
+        </ListView>
+        
+        <TextBlock Grid.Row="1" Text="Laden..." FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="Selecteer" Command="{Binding SelectNodeCommand}" IsDefault="True" MinWidth="80" Margin="0,0,10,0"/>
+            <Button Content="Annuleren" Command="{Binding CancelCommand}" IsCancel="True" MinWidth="80"/>
+        </StackPanel>
+    </Grid>
+</Window>
