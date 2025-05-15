@@ -25,10 +25,10 @@ jobs:
       uses: microsoft/setup-msbuild@v1.1
 
     - name: Restore NuGet packages for Solution
-      run: nuget restore '/Data Logger/Data Logger.sln'
+      run: nuget restore "Data Logger/Data Logger.sln"
 
     - name: Build Solution with MSBuild
-      run: msbuild Data_Logger.sln /p:Configuration=Release /p:Platform="Any CPU"
+      run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
 
     - name: Run Unit Tests with VSTest.Console
       run: |
