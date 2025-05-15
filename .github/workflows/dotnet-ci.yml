@@ -64,7 +64,7 @@ jobs:
         
         $testDllPath = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" # Pas dit pad aan!
 
-        # $testFilter = '/TestCaseFilter:"FullyQualifiedName~DataLogger.IntegrationTest"'
+        $testFilter = '/TestCaseFilter:"FullyQualifiedName~DataLogger.IntegrationTest"'
 
         $resultFile = "unit_test_results.trx"
 
@@ -84,38 +84,62 @@ jobs:
 
   integration-test:
     name: Integration Test with Docker OPC UA Server
-    runs-on: ubuntu-latest 
+    runs-on: windows-latest 
     needs: build-and-unit-test 
 
-    services: 
-      docker:
-        image: docker:dind 
-        options: --privileged 
+    # services: 
+    #   docker:
+    #     image: docker:dind 
+    #     options: --privileged 
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Setup .NET SDK
-      uses: actions/setup-dotnet@v3
+      uses: actions/checkout@v4
+    
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v1
       with:
-        dotnet-version: '4.8.1' 
+        nuget-version: 'latest'
 
-    - name: Restore dependencies for Test Project
-      run: dotnet restore ./DataLogger.Tests 
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v1.1
 
-    - name: Build Test Project (nodig als niet alles gebuild is in vorige job)
-      run: dotnet build ./DataLogger.Tests --configuration Release --no-restore
+    - name: Restore NuGet packages for Test Project
+      run: nuget restore "Data Logger.Tests/Data Logger.Tests.csproj"
 
-    - name: Check Docker Version
-      run: docker --version
+    - name: Build Test Project
+      run: msbuild "Data Logger.Tests/Data Logger.Tests.csproj" /p:Configuration=Release /p:Platform="Any CPU"
 
-    - name: Pull OPC UA Reference Server Image
-      run: docker pull ghcr.io/opcfoundation/uanetstandard/refserver:latest
-      
-    - name: Run Integration Tests
+    - name: Start OPC UA Reference Server in Docker
+      shell: pwsh
       run: |
-        echo "Starting Integration Tests..."
-        dotnet test ./DataLogger.Tests --configuration Release --no-build --verbosity normal --filter "FullyQualifiedName~IntegrationTests"
+        Write-Host "Verwacht dat OneTimeSetUp de Docker container start..."
+        if (-not (Test-Path Env:DOCKER_HOST)) {
+            Write-Warning "DOCKER_HOST environment variable not set. Docker Desktop might not be configured for remote access or to run Linux containers easily."
+        }
+        docker --version # Check of docker CLI werkt
+
+    - name: Run Integration Tests with VSTest.Console
+      shell: pwsh
+      run: |
+        if (-not $vstestPath) { Write-Error "VSTest.Console.exe niet gevonden."; exit 1 }
+        Write-Host "VSTest.Console.exe gevonden op: $vstestPath"
+        
+        $testDllPath = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" # Controleer dit pad!
+
+        $testFilter = '/TestCaseFilter:"TestCategory=IntegrationTest"' # Alleen IntegrationTest
+        $resultFile = "integration_test_results.trx"
+
+        Write-Host "Test DLL Pad (Integration): $testDllPath"
+        Write-Host "Filter (Integration): $testFilter"
+        & $vstestPath $testDllPath /Logger:"trx;LogFileName=$resultFile" $testFilter /EnableCodeCoverage /InIsolation
+      timeout-minutes: 20
+      
+    - name: Upload Integration Test Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: integration-test-results-framework
+        path: integration_test_results.trx
         
       timeout-minutes: 15
