@@ -20,7 +20,7 @@ jobs:
         nuget-version: 'latest' # Gebruik de laatste stabiele versie van NuGet
 
     - name: Restore NuGet packages
-      run: nuget restore "Data Logger.sln" # Herstel packages voor de gehele solution
+      run: nuget restore "Data Logger/Data Logger.sln"
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
@@ -28,8 +28,8 @@ jobs:
         msbuild-architecture: x86 # Of x64, afhankelijk van je project target
 
     - name: Build solution
-      run: msbuild "Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU" # Bouw de solution in Release configuratie
-
+      run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
+      
     - name: Setup VSTest
       uses: darenm/Setup-VSTest@v1.2 # Action om VSTest.console.exe makkelijk beschikbaar te maken
 
