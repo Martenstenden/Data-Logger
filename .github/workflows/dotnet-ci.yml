@@ -2,13 +2,27 @@ name: .NET Desktop CI/CD for Data Logger
 
 on:
   push:
-    branches: [ "main", "develop" ] 
+    branches: [ "main", "develop" ]
   pull_request:
-    branches: [ "main" ] 
+    branches: [ "main" ]
 
 jobs:
   build-and-test:
-    runs-on: windows-latest 
+    runs-on: windows-latest # Je .NET Framework tests draaien hier
+
+    # Definieer de OPC UA server als een service
+    # GitHub Actions draait services in aparte (meestal Linux) containers
+    # en maakt ze beschikbaar voor je job.
+    services:
+      opcua-server: # Dit is de naam die je kunt gebruiken om de service te adresseren (kan ook localhost zijn)
+        image: ghcr.io/opcfoundation/uanetstandard/refserver:latest
+        ports:
+          - 62541:62541 # Map poort 62541 van de runner naar poort 62541 in de container
+        # Opties kunnen hier worden toegevoegd voor de service, bijv. omgevingsvariabelen voor de server.
+        # Volume mapping voor PKI direct van een Windows host naar een Linux service container is complex.
+        # Het is beter als de server image zijn eigen certificaten beheert of configureerbaar is
+        # om client certificaten te accepteren die door jouw client (OpcUaConfigurator) zijn gegenereerd,
+        # vooral met auto-accept ingeschakeld.
 
     steps:
     - name: Checkout code
@@ -17,7 +31,7 @@ jobs:
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v2
       with:
-        nuget-version: 'latest' 
+        nuget-version: 'latest'
 
     - name: Restore NuGet packages
       run: nuget restore "Data Logger/Data Logger.sln"
@@ -25,62 +39,50 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
       with:
-        msbuild-architecture: x86 
+        msbuild-architecture: x86 # Of x64
 
     - name: Build solution
       run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
-      
-    - name: Setup VSTest
-      uses: darenm/Setup-VSTest@v1.2 
 
-    - name: Run Unit Tests
+    - name: Setup VSTest
+      uses: darenm/Setup-VSTest@v1.2
+
+    - name: Run Unit Tests (excluding IntegrationTests)
       run: vstest.console.exe "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" /TestCaseFilter:"Category!=IntegrationTest" /Logger:trx /ResultsDirectory:"UnitTestResults"
 
     - name: Upload Unit Test Results
-      if: always() 
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: unit-test-results
-        path: TestResults/**/*.trx
-
-    - name: Check Docker version (for debugging)
-      run: docker --version
-
-    - name: Check Docker is running (for debugging)
-      run: docker ps
-      continue-on-error: true 
+        path: UnitTestResults/**/*.trx
 
     - name: Run Integration Tests
-      id: run_integration_tests
-      continue-on-error: true
+      # Deze tests zullen nu proberen te verbinden met de OPC UA server die als service draait.
+      # De service is typisch bereikbaar op 'localhost:<host_port>' binnen de job.
       run: vstest.console.exe "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" /TestCaseFilter:"Category=IntegrationTest" /Logger:trx /ResultsDirectory:"IntegrationTestResults"
+      env:
+        # Stel een omgevingsvariabele in die je tests kunnen gebruiken om het endpoint te bepalen.
+        OPCUA_TEST_SERVER_ENDPOINT: "opc.tcp://localhost:62541/Quickstarts/ReferenceServer"
+        # Voeg een variabele toe om aan je testcode (DockerTestHelper) te laten weten dat het in CI draait
+        # en de Docker container NIET zelf moet beheren.
+        CI_ENVIRONMENT: "true"
 
     - name: Upload Integration Test Results
-      if: always() 
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: integration-test-results
         path: IntegrationTestResults/**/*.trx
 
-    - name: Check Integration Test Outcome
-      if: steps.run_integration_tests.outcome == 'failure'
-      run: |
-        echo "Integration tests failed. See uploaded artifacts for details."
-        exit 1
-
     - name: Upload Build Artifact (Data Logger Application)
       uses: actions/upload-artifact@v4
       with:
         name: data-logger-application
-        path: | 
-          Data Logger/bin/Release/**/*.exe
-          Data Logger/bin/Release/**/*.dll
-          Data Logger/bin/Release/**/*.config
+        path: |
+          Data Logger/Data Logger/bin/Release/**/*.exe
+          Data Logger/Data Logger/bin/Release/**/*.dll
+          Data Logger/Data Logger/bin/Release/**/*.config
           Data Logger/bin/Release/Logs 
           Data Logger/bin/Release/LoggedData 
-          Data Logger/bin/Release/CertificateStores 
-        
-        
-        
-        
-        
+          Data Logger/bin/Release/CertificateStores  
