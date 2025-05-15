@@ -1,145 +1,137 @@
-name: .NET CI/CD for Data Logger
+name: .NET Framework CI/CD for Data Logger
 
 on:
-  push: 
+  push:
     branches: [ main, develop ]
-  pull_request: 
+  pull_request:
     branches: [ main, develop ]
-  workflow_dispatch: 
+  workflow_dispatch:
 
 jobs:
-  build-and-unit-test:
-    name: Build & Unit Test
-    runs-on: windows-latest 
+  build-and-test: # Samengevoegde naam, of je kunt ze apart houden
+    name: Build & Test (.NET Framework)
+    runs-on: windows-latest
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
     - name: Setup NuGet
-      uses: NuGet/setup-nuget@v1
+      uses: NuGet/setup-nuget@v1 # Controleer voor de laatste versie (v1 is een voorbeeld)
       with:
         nuget-version: 'latest'
 
     - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v1.1
+      uses: microsoft/setup-msbuild@v1.1 # Controleer voor de laatste versie
 
     - name: Restore NuGet packages for Solution
-      run: nuget restore "Data Logger/Data Logger.sln"
+      # Pad relatief aan de root van de repository (waar .git en .github staan)
+      # Als je solution file 'Data Logger/Data Logger.sln' heet:
+      run: nuget restore "Data Logger/Data Logger.sln" -SolutionDirectory "Data Logger"
+      # Als je solution file 'Data Logger.sln' in de root staat:
+      # run: nuget restore "Data Logger.sln" -SolutionDirectory .
 
-    - name: Build Solution with MSBuild
+    - name: Build Solution
       run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
+      # Pas pad aan als je solution elders staat.
 
-    - name: Run Unit Tests with VSTest.Console
+    - name: Run Unit Tests (excluding IntegrationTests)
+      shell: pwsh
       run: |
-        $vstestPath = Get-Command vstest.console.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
-        if (-not $vstestPath) {
-            $vsInstallPaths = @(
-                "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions\TestPlatform",
-                "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Professional\Common7\IDE\Extensions\TestPlatform",
-                "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Community\Common7\IDE\Extensions\TestPlatform",
-                "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions\TestPlatform",
-                "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional\Common7\IDE\Extensions\TestPlatform",
-                "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\Common7\IDE\Extensions\TestPlatform",
+        $vstestPaths = @(
+            Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions\TestPlatform\vstest.console.exe",
+            Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\2022\Professional\Common7\IDE\Extensions\TestPlatform\vstest.console.exe",
+            Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\2022\Community\Common7\IDE\Extensions\TestPlatform\vstest.console.exe",
+            Join-Path ${env:ProgramFiles} "Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions\TestPlatform\vstest.console.exe",
+            Join-Path ${env:ProgramFiles} "Microsoft Visual Studio\2022\Professional\Common7\IDE\Extensions\TestPlatform\vstest.console.exe",
+            Join-Path ${env:ProgramFiles} "Microsoft Visual Studio\2022\Community\Common7\IDE\Extensions\TestPlatform\vstest.console.exe",
+            # Fallback voor VS 2019 als VS 2022 niet de TestPlatform extensie map heeft
+            Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\2019\Enterprise\Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe",
+            Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\2019\Professional\Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe",
+            Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe"
+        )
+        $vstestPath = $vstestPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
 
-                "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Enterprise\Common7\IDE\CommonExtensions\Microsoft\TestWindow",
-                "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Professional\Common7\IDE\CommonExtensions\Microsoft\TestWindow",
-                "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\TestWindow"
-            )
-            foreach ($path in $vsInstallPaths) {
-                $testExe = Join-Path $path "vstest.console.exe"
-                if (Test-Path $testExe) {
-                    $vstestPath = $testExe
-                    break
-                }
+        if (-not $vstestPath) {
+            Write-Error "VSTest.Console.exe niet gevonden."
+            # Probeer VSTest te vinden via 'where.exe' als fallback
+            $vstestPath = (where.exe vstest.console.exe | Select-Object -First 1)
+            if (-not $vstestPath) {
+                 Write-Error "VSTest.Console.exe ook niet gevonden via where.exe. Zorg dat Visual Studio Test Platform is geïnstalleerd op de runner."
+                 exit 1
             }
         }
-        
-        if (-not $vstestPath) {
-            Write-Error "VSTest.Console.exe niet gevonden. Controleer de paden of installeer 'Microsoft.TestPlatform' NuGet-pakket in testproject en probeer 'dotnet test'."
-            exit 1
-        }
-
         Write-Host "VSTest.Console.exe gevonden op: $vstestPath"
         
-        $testDllPath = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" # Pas dit pad aan!
+        # Pad naar je test DLL, relatief aan de root van de repository (Data-Logger)
+        # Dit pad moet overeenkomen met de output van je build stap.
+        $testDllPath = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" 
+        # OF als je solution in een submap "Data Logger" staat:
+        # $testDllPath = "Data Logger/DataLogger.Tests/bin/Release/DataLogger.Tests.dll"
 
-        $testFilter = '/TestCaseFilter:"FullyQualifiedName~DataLogger.IntegrationTest"'
+        $unitTestFilter = '/TestCaseFilter:"TestCategory!=IntegrationTest"'
+        $unitTestResultFile = "unit_test_results.trx"
 
-        $resultFile = "unit_test_results.trx"
-
-        Write-Host "Test DLL Pad: $testDllPath"
-        Write-Host "Filter: $testFilter"
-        Write-Host "Resultaat Bestand: $resultFile"
-        
-        & $vstestPath $testDllPath /Logger:"trx;LogFileName=$resultFile" $testFilter /EnableCodeCoverage /InIsolation
-      shell: pwsh
+        Write-Host "Unit Test DLL Pad: $testDllPath"
+        Write-Host "Unit Test Filter: $unitTestFilter"
+        & $vstestPath $testDllPath /Logger:"trx;LogFileName=$unitTestResultFile" $unitTestFilter /EnableCodeCoverage /InIsolation
 
     - name: Upload Unit Test Results
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: unit-test-results
-        path: DataLogger.Tests/TestResults/unit_test_results.trx
+        name: unit-test-results-framework
+        path: unit_test_results.trx # VSTest plaatst dit in de werkdirectory
 
-  integration-test:
-    name: Integration Test with Docker OPC UA Server
-    runs-on: windows-latest 
-    needs: build-and-unit-test 
-
-    # services: 
-    #   docker:
-    #     image: docker:dind 
-    #     options: --privileged 
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup NuGet
-      uses: NuGet/setup-nuget@v1
-      with:
-        nuget-version: 'latest'
-
-    - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v1.1
-
-    - name: Restore NuGet packages for Test Project
-      run: nuget restore "Data Logger/Data Logger.sln" -SolutionDirectory "Data Logger" 
-
-    - name: Build Test Project
-      run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
-
-    - name: Start OPC UA Reference Server in Docker
+    # Docker gerelateerde stappen voor integratietests
+    # Deze stappen veronderstellen dat de Windows runner Docker CLI kan gebruiken voor Linux containers
+    - name: Check Docker is available (Integration Test Prerequisite)
       shell: pwsh
       run: |
-        Write-Host "Verwacht dat OneTimeSetUp de Docker container start..."
-        if (-not (Test-Path Env:DOCKER_HOST)) {
-            Write-Warning "DOCKER_HOST environment variable not set. Docker Desktop might not be configured for remote access or to run Linux containers easily."
+        docker --version
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Docker CLI niet gevonden of werkt niet. Sla integratietests over of markeer als mislukt."
+          # exit 1 # Of laat het doorgaan en de tests falen
         }
-        docker --version # Check of docker CLI werkt
 
-    - name: Run Integration Tests with VSTest.Console
+    - name: Pull OPC UA Reference Server Image (Integration Test Prerequisite)
+      shell: pwsh
+      run: docker pull ghcr.io/opcfoundation/uanetstandard/refserver:latest
+
+    - name: Run Integration Tests (requires Docker)
       shell: pwsh
       run: |
-        if (-not $vstestPath) { Write-Error "VSTest.Console.exe niet gevonden."; exit 1 }
-        Write-Host "VSTest.Console.exe gevonden op: $vstestPath"
+        # $vstestPath zou nog steeds moeten zijn ingesteld vanuit de vorige PowerShell run stap
+        # Als dat niet het geval is, herhaal de logica om $vstestPath hier te vinden.
+        if (-not $vstestPath) {
+            $vstestPaths = @(
+                Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions\TestPlatform\vstest.console.exe",
+                # ... (rest van de paden zoals hierboven) ...
+                Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe"
+            )
+            $vstestPath = $vstestPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if (-not $vstestPath) {
+                $vstestPath = (where.exe vstest.console.exe | Select-Object -First 1)
+                if (-not $vstestPath) { Write-Error "VSTest.Console.exe niet gevonden voor integratietests."; exit 1 }
+            }
+        }
+        Write-Host "VSTest.Console.exe (voor integratietests) gevonden op: $vstestPath"
+
+        $testDllPath = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" # Controleer dit pad
+        $integrationTestFilter = '/TestCaseFilter:"TestCategory=IntegrationTest"'
+        $integrationTestResultFile = "integration_test_results.trx"
+
+        Write-Host "Integration Test DLL Pad: $testDllPath"
+        Write-Host "Integration Test Filter: $integrationTestFilter"
         
-        $testDllPath = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" # Controleer dit pad!
+        # De OneTimeSetUp in je test assembly zal DockerTestHelper aanroepen
+        # om de container te starten en te wachten.
+        & $vstestPath $testDllPath /Logger:"trx;LogFileName=$integrationTestResultFile" $integrationTestFilter /EnableCodeCoverage /InIsolation
+      timeout-minutes: 20 # Geef integratietests meer tijd
 
-        $testFilter = '/TestCaseFilter:"TestCategory=IntegrationTest"' # Alleen IntegrationTest
-        $resultFile = "integration_test_results.trx"
-
-        Write-Host "Test DLL Pad (Integration): $testDllPath"
-        Write-Host "Filter (Integration): $testFilter"
-        & $vstestPath $testDllPath /Logger:"trx;LogFileName=$resultFile" $testFilter /EnableCodeCoverage /InIsolation
-      timeout-minutes: 20
-      
     - name: Upload Integration Test Results
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: integration-test-results-framework
         path: integration_test_results.trx
-        
-      timeout-minutes: 15
