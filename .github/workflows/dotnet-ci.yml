@@ -105,10 +105,10 @@ jobs:
       uses: microsoft/setup-msbuild@v1.1
 
     - name: Restore NuGet packages for Test Project
-      run: nuget restore "DataLogger.Tests/DataLogger.Tests.csproj"
+      run: nuget restore "Data Logger/Data Logger.sln" -SolutionDirectory "Data Logger" 
 
     - name: Build Test Project
-      run: msbuild "DataLogger.Tests/DataLogger.Tests.csproj" /p:Configuration=Release /p:Platform="Any CPU"
+      run: msbuild "Data Logger/DataLogger.Tests/DataLogger.Tests.csproj" /p:Configuration=Release /p:Platform="Any CPU"
 
     - name: Start OPC UA Reference Server in Docker
       shell: pwsh
