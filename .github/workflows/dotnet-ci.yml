@@ -2,13 +2,13 @@ name: .NET Desktop CI/CD for Data Logger
 
 on:
   push:
-    branches: [ "main", "develop" ] # Triggert op push naar main en develop branches
+    branches: [ "main", "develop" ] 
   pull_request:
-    branches: [ "main" ] # Triggert op pull requests naar de main branch
+    branches: [ "main" ] 
 
 jobs:
   build-and-test:
-    runs-on: windows-latest # Gebruik een Windows runner voor .NET Framework projecten
+    runs-on: windows-latest 
 
     steps:
     - name: Checkout code
@@ -17,7 +17,7 @@ jobs:
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v2
       with:
-        nuget-version: 'latest' # Gebruik de laatste stabiele versie van NuGet
+        nuget-version: 'latest' 
 
     - name: Restore NuGet packages
       run: nuget restore "Data Logger/Data Logger.sln"
@@ -25,67 +25,62 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
       with:
-        msbuild-architecture: x86 # Of x64, afhankelijk van je project target
+        msbuild-architecture: x86 
 
     - name: Build solution
       run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
       
     - name: Setup VSTest
-      uses: darenm/Setup-VSTest@v1.2 # Action om VSTest.console.exe makkelijk beschikbaar te maken
+      uses: darenm/Setup-VSTest@v1.2 
 
     - name: Run Unit Tests
-      run: vstest.console.exe "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" /Logger:trx /ResultsDirectory:"TestResults"
-      # Pas het pad naar DataLogger.Tests.dll aan indien nodig na de build.
-      # Deze stap faalt de workflow als er tests falen.
+      run: vstest.console.exe "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" /TestCaseFilter:"Category!=IntegrationTest" /Logger:trx /ResultsDirectory:"UnitTestResults"
 
     - name: Upload Unit Test Results
-      if: always() # Upload altijd, ook als tests falen, voor analyse
+      if: always() 
       uses: actions/upload-artifact@v4
       with:
         name: unit-test-results
         path: TestResults/**/*.trx
 
-    # --- Integratietests met Docker ---
-    # Deze stappen vereisen dat Docker correct werkt op de GitHub runner
-    # en dat je DockerTestHelper.cs de container correct kan beheren.
     - name: Check Docker version (for debugging)
       run: docker --version
 
     - name: Check Docker is running (for debugging)
       run: docker ps
-      continue-on-error: true # Voor het geval Docker daemon niet direct reageert
+      continue-on-error: true 
 
     - name: Run Integration Tests
-      # Deze stap is complexer vanwege de Docker afhankelijkheid.
-      # Je DockerTestHelper.cs zal proberen de container te starten.
-      # Zorg dat de image 'ghcr.io/opcfoundation/uanetstandard/refserver:latest' publiek toegankelijk is.
+      id: run_integration_tests
+      continue-on-error: true
       run: vstest.console.exe "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" /TestCaseFilter:"Category=IntegrationTest" /Logger:trx /ResultsDirectory:"IntegrationTestResults"
-      # Gebruik /TestCaseFilter als je tests hebt gecategoriseerd (bijv. [Category("IntegrationTest")] in NUnit).
-      # Als je geen categorieën hebt, en alle tests in DataLogger.Tests.dll zijn integratietests,
-      # kun je de /TestCaseFilter weglaten, maar het is best practice om ze te scheiden.
-      # Deze stap faalt de workflow als er tests falen.
-      # `continue-on-error: true` kan hier tijdelijk gebruikt worden tijdens het debuggen van de Docker setup.
 
     - name: Upload Integration Test Results
-      if: always() # Upload altijd, ook als tests falen, voor analyse
+      if: always() 
       uses: actions/upload-artifact@v4
       with:
         name: integration-test-results
         path: IntegrationTestResults/**/*.trx
 
+    - name: Check Integration Test Outcome
+      if: steps.run_integration_tests.outcome == 'failure'
+      run: |
+        echo "Integration tests failed. See uploaded artifacts for details."
+        exit 1
+
     - name: Upload Build Artifact (Data Logger Application)
       uses: actions/upload-artifact@v4
       with:
         name: data-logger-application
-        path: | # Lijst van paden naar de artefacten
+        path: | 
           Data Logger/bin/Release/**/*.exe
           Data Logger/bin/Release/**/*.dll
           Data Logger/bin/Release/**/*.config
-          Data Logger/bin/Release/Logs # Optioneel, als je de standaard logmap wilt meenemen
-          Data Logger/bin/Release/LoggedData # Optioneel
-          Data Logger/bin/Release/CertificateStores # Belangrijk voor OPC UA
-        # Exclude test adapters en andere onnodige bestanden
-        # path-exclude: |
-        #   **/*testadapter*
-        #   **/*.pdb
-        #   **/*.xml # Tenzij je XML documentatie bestanden wilt deployen
+          Data Logger/bin/Release/Logs 
+          Data Logger/bin/Release/LoggedData 
+          Data Logger/bin/Release/CertificateStores 
+        
+        
+        
+        
+        
