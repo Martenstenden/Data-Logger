@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-test:
-    name: Build & Test (.NET Framework)
+  unit-tests:
+    name: Unit-Tests
     runs-on: windows-latest
 
     steps:
@@ -68,31 +68,38 @@ jobs:
         name: unit-test-results-framework
         path: unit_test_results.trx
 
-  integration-tests:
-    name: Integration Tests
-    runs-on: ubuntu-latest # Cruciaal: Linux runner!
-    container:
-      image: ghcr.io/opcfoundation/uanetstandard/refserver:latest
-      ports:
-        - 62541:62541 # Exposeer de poort
-      volumes:
-        - ${{ github.workspace }}/DataLogger.Tests/ReferenceServerFiles/OPC Foundation:/root/.local/share/OPC Foundation # Mount het volume
-      options: --privileged # Mogelijk nodig voor sommige Docker operaties
+  build-test-image:
+    name: Build Test Image
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '6.0.417' # Of een andere LTS versie (check https://dotnet.microsoft.com/download/dotnet)
+      - name: Build Docker image
+        run: |
+          docker build -t my-test-image:latest -f Dockerfile.test 
+          docker push my-test-image:latest # Of een ander registry
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: build-test-image 
+    container:
+      image: my-test-image:latest
+      ports:
+        - 62541:62541
+      volumes:
+        - ${{ github.workspace }}/DataLogger.Tests/ReferenceServerFiles/OPC Foundation:/root/.local/share/OPC Foundation
+      options: --privileged
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Run Integration Tests
-        shell: bash # Gebruik bash (ipv sh)
+        shell: bash
         run: |
           dotnet --info # Debug info
 
-          # VSTest via dotnet test gebruiken
           $testDllPath = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll"
           $integrationTestFilter = '/TestCaseFilter:"TestCategory=IntegrationTest"'
           $integrationTestResultFile = "integration_test_results.trx"
