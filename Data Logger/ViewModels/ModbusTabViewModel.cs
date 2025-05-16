@@ -80,7 +80,7 @@ namespace Data_Logger.ViewModels
                 statusService ?? throw new ArgumentNullException(nameof(statusService));
             _dataLoggingService =
                 dataLoggingService ?? throw new ArgumentNullException(nameof(dataLoggingService));
-            _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService)); // <<< TOEWIJZEN
+            _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService)); 
 
             ActivePlotTabs = new ObservableCollection<PlotTabViewModel>();
 
@@ -126,7 +126,7 @@ namespace Data_Logger.ViewModels
         public void SaveChangesForModbusConfigAndService()
         {
             _specificLogger.Debug("SaveChangesForModbusConfigAndService aangeroepen. Debounce timer wordt (her)start.");
-            _saveChangesDebounceTimer.Stop(); // Herstart de timer bij elke aanroep
+            _saveChangesDebounceTimer.Stop(); 
             _saveChangesDebounceTimer.Start();
         }
         
@@ -134,26 +134,26 @@ namespace Data_Logger.ViewModels
         {
             _specificLogger.Information("ModbusTabViewModel '{DisplayName}': Wijzigingen in ModbusConfig worden opgeslagen en service wordt geherconfigureerd.", DisplayName);
 
-            // De ModbusConfig property verwijst naar het object in SettingsService.CurrentSettings.
-            // De wijzigingen in de DataGrid zijn direct in dat object gedaan dankzij TwoWay binding.
-            // We hoeven hier dus alleen SettingsService.SaveSettings() aan te roepen.
+            
+            
+            
             _settingsService.SaveSettings(); 
             _specificLogger.Information("Instellingen (incl. Modbus tag wijzigingen) opgeslagen.");
 
-            // Herconfigureer de Modbus service met de (mogelijk gemuteerde) ModbusConfig
+            
             if (_modbusService != null && this.ModbusConfig != null)
             {
                 _modbusService.Reconfigure(this.ModbusConfig);
                 _specificLogger.Information("ModbusService geherconfigureerd.");
             }
 
-            // Herinitialiseer baseline states (belangrijk als alarm/outlier instellingen zijn gewijzigd)
+            
             InitializeBaselineStates();
             _specificLogger.Debug("Baseline states hergeïnitialiseerd.");
             
             SynchronizeDataValuesWithConfiguration();
 
-            UpdateCommandStates(); // Update CanExecute van commando's
+            UpdateCommandStates(); 
             _specificLogger.Debug("ModbusTabViewModel '{DisplayName}': PersistAndReconfigureModbusService voltooid.");
         }
         
@@ -161,28 +161,28 @@ namespace Data_Logger.ViewModels
         {
             if (ModbusConfig == null || ModbusConfig.TagsToMonitor == null)
             {
-                // Als er geen configuratie is, maak DataValues leeg
+                
                 Application.Current?.Dispatcher.Invoke(() => DataValues.Clear());
                 _specificLogger.Debug("SynchronizeDataValues: ModbusConfig of TagsToMonitor is null, DataValues gewist.");
                 return;
             }
 
-            // Haal de namen op van alle actieve, geconfigureerde tags
+            
             var activeConfiguredTagNames = ModbusConfig.TagsToMonitor
                                                .Where(t => t.IsActive)
                                                .Select(t => t.TagName)
-                                               .Distinct() // Voor het geval er dubbele namen zouden zijn (idealiter niet)
+                                               .Distinct() 
                                                .ToList();
 
             _specificLogger.Debug("SynchronizeDataValues: Actieve geconfigureerde TagNames: [{ActiveTags}]", string.Join(", ", activeConfiguredTagNames));
 
             Application.Current?.Dispatcher.Invoke(() =>
             {
-                // 1. Verwijder items uit DataValues waarvan de TagName niet (meer)
-                //    voorkomt in de lijst van actieve, geconfigureerde tags.
+                
+                
                 var tagsToRemoveFromDataValues = DataValues
                                                    .Where(dv => !activeConfiguredTagNames.Contains(dv.TagName))
-                                                   .ToList(); // Maak een kopie om te itereren en te verwijderen
+                                                   .ToList(); 
 
                 foreach (var tagToRemove in tagsToRemoveFromDataValues)
                 {
@@ -190,9 +190,9 @@ namespace Data_Logger.ViewModels
                     _specificLogger.Debug("SynchronizeDataValues: Verwijderd '{TagName}' uit live DataValues (niet meer actief/geconfigureerd).", tagToRemove.TagName);
                 }
 
-                // 2. Optioneel: Voeg placeholders toe voor nieuwe actieve tags die nog niet in DataValues staan.
-                //    Dit zorgt ervoor dat ze direct zichtbaar zijn in de DataGrid, zelfs voordat de eerste data binnenkomt.
-                //    De OnModbusTagsDataReceived methode zal deze placeholders dan updaten.
+                
+                
+                
                 foreach (var tagName in activeConfiguredTagNames)
                 {
                     if (!DataValues.Any(dv => dv.TagName == tagName))
@@ -200,9 +200,9 @@ namespace Data_Logger.ViewModels
                         var placeholder = new LoggedTagValue
                         {
                             TagName = tagName,
-                            Timestamp = DateTime.MinValue, // Of DateTime.Now, maar MinValue geeft aan dat het oud is
-                            Value = "---",                 // Placeholder
-                            IsGoodQuality = false,         // Initieel geen data = geen goede kwaliteit
+                            Timestamp = DateTime.MinValue, 
+                            Value = "---",                 
+                            IsGoodQuality = false,         
                             ErrorMessage = "Wacht op data..."
                         };
                         DataValues.Add(placeholder);

@@ -24,7 +24,7 @@ public class ModbusDataConverter
                     logger?.Error("InterpretRegisterData: Onvoldoende registers voor {DataType}. Verwacht 1, kreeg {Length}.", dataType, registers.Length);
                     throw new ArgumentException($"Onvoldoende registers voor {dataType}. Verwacht 1, kreeg {registers.Length}.", nameof(registers));
                 }
-                break; // Validatie is ok, ga door naar de eigenlijke conversie
+                break; 
 
             case ModbusDataType.Int32:
             case ModbusDataType.UInt32:
@@ -34,7 +34,7 @@ public class ModbusDataConverter
                     logger?.Error("InterpretRegisterData: Onvoldoende registers voor {DataType}. Verwacht 2, kreeg {Length}.", dataType, registers.Length);
                     throw new ArgumentException($"Onvoldoende registers voor {dataType}. Verwacht 2, kreeg {registers.Length}.", nameof(registers));
                 }
-                break; // Validatie is ok
+                break; 
         }
         
         switch (dataType)
@@ -78,7 +78,7 @@ public class ModbusDataConverter
 
             default:
                 logger?.Warning("Niet-ondersteund ModbusDataType voor interpretatie: {DataType}. Probeert ruwe ushort[0] terug te geven.", dataType);
-                if (registers.Length < 1) // Nog een check voor de default case, hoewel al bovenaan gedekt
+                if (registers.Length < 1) 
                 {
                     logger?.Error("InterpretRegisterData: Onvoldoende registers voor default fallback. Verwacht 1, kreeg {Length}.", registers.Length);
                     throw new ArgumentException($"Onvoldoende registers voor default fallback. Verwacht 1, kreeg {registers.Length}.", nameof(registers));

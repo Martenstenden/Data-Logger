@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Data_Logger.Models;
@@ -17,6 +18,7 @@ namespace Data_Logger.Services.Implementations
     public class OpcUaService : IOpcUaService
     {
         #region Fields
+
         private readonly ILogger _logger;
         private OpcUaConnectionConfig _config;
         private Session _session;
@@ -30,9 +32,11 @@ namespace Data_Logger.Services.Implementations
 
         private const int InitialReconnectDelayMs = 2000;
         private const int MaxReconnectDelayMs = 30000;
+
         #endregion
 
         #region Properties
+
         public bool IsConnected
         {
             get => _isConnected;
@@ -47,14 +51,18 @@ namespace Data_Logger.Services.Implementations
         }
 
         public NamespaceTable NamespaceUris => _session?.NamespaceUris;
+
         #endregion
 
         #region Events
+
         public event EventHandler ConnectionStatusChanged;
         public event EventHandler<IEnumerable<LoggedTagValue>> TagsDataReceived;
+
         #endregion
 
         #region Constructor
+
         public OpcUaService(
             ILogger logger,
             OpcUaConnectionConfig config,
@@ -75,9 +83,11 @@ namespace Data_Logger.Services.Implementations
                 _config.ConnectionName
             );
         }
+
         #endregion
 
         #region Connection Management
+
         public async Task<bool> ConnectAsync()
         {
             if (IsConnected)
@@ -258,6 +268,7 @@ namespace Data_Logger.Services.Implementations
                     {
                         _reconnectHandler.Dispose();
                     }
+
                     _reconnectHandler = new SessionReconnectHandler(true, MaxReconnectDelayMs);
                 }
 
@@ -340,24 +351,27 @@ namespace Data_Logger.Services.Implementations
         {
             _logger.Information(
                 "Herconfigureren van OpcUaService {OldConnectionName} naar {NewConnectionName}. Endpoint: {NewEndpoint}",
-                _config?.ConnectionName ?? "N/A", 
+                _config?.ConnectionName ?? "N/A",
                 newConfig.ConnectionName,
                 newConfig.EndpointUrl
             );
-            
-            if (_config == null) 
+
+            if (_config == null)
             {
-                _config = CreateDeepCopy(newConfig); 
-                _logger.Information("Eerste configuratie voor OpcUaService, geen vergelijking nodig.");
-                
+                _config = CreateDeepCopy(newConfig);
+                _logger.Information(
+                    "Eerste configuratie voor OpcUaService, geen vergelijking nodig."
+                );
+
                 if (IsConnected)
                 {
                     Task.Run(async () =>
                     {
-                        await StopMonitoringTagsAsync(); 
-                        await StartMonitoringTagsAsync(); 
+                        await StopMonitoringTagsAsync();
+                        await StartMonitoringTagsAsync();
                     });
                 }
+
                 return;
             }
 
@@ -414,27 +428,28 @@ namespace Data_Logger.Services.Implementations
                 }
             }
         }
-        
+
         private OpcUaConnectionConfig CreateDeepCopy(OpcUaConnectionConfig original)
         {
-            if (original == null) return null;
+            if (original == null)
+                return null;
             try
             {
-                
-                
-                
-                
-                var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Objects };
+                var settings = new JsonSerializerSettings
+                {
+                    TypeNameHandling = TypeNameHandling.Objects,
+                };
                 string serialized = JsonConvert.SerializeObject(original, settings);
                 return JsonConvert.DeserializeObject<OpcUaConnectionConfig>(serialized, settings);
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Kon geen diepe kopie maken van OpcUaConnectionConfig. Fallback naar shallow copy (RISKANT).");
-                
-                
-                
-                throw; 
+                _logger.Error(
+                    ex,
+                    "Kon geen diepe kopie maken van OpcUaConnectionConfig. Fallback naar shallow copy (RISKANT)."
+                );
+
+                throw;
             }
         }
 
@@ -443,8 +458,12 @@ namespace Data_Logger.Services.Implementations
             ObservableCollection<OpcUaTagConfig> newTags
         )
         {
-            _logger.Debug("HaveMonitoringParametersChanged: Vergelijkt oude tags (Count={OldCount}) met nieuwe tags (Count={NewCount})", oldTags?.Count ?? -1, newTags?.Count ?? -1);
-            
+            _logger.Debug(
+                "HaveMonitoringParametersChanged: Vergelijkt oude tags (Count={OldCount}) met nieuwe tags (Count={NewCount})",
+                oldTags?.Count ?? -1,
+                newTags?.Count ?? -1
+            );
+
             var oldActiveMonitoringParams = oldTags
                 .Where(t => t.IsActive)
                 .Select(t => new { t.NodeId, t.SamplingInterval })
@@ -456,19 +475,36 @@ namespace Data_Logger.Services.Implementations
                 .Select(t => new { t.NodeId, t.SamplingInterval })
                 .OrderBy(t => t.NodeId)
                 .ToList();
-            
+
             try
             {
-                _logger.Debug("Old Active Monitoring Params ({Count}): {ParamsJson}", oldActiveMonitoringParams.Count, JsonConvert.SerializeObject(oldActiveMonitoringParams, Formatting.None));
-                _logger.Debug("New Active Monitoring Params ({Count}): {ParamsJson}", newActiveMonitoringParams.Count, JsonConvert.SerializeObject(newActiveMonitoringParams, Formatting.None));
+                _logger.Debug(
+                    "Old Active Monitoring Params ({Count}): {ParamsJson}",
+                    oldActiveMonitoringParams.Count,
+                    JsonConvert.SerializeObject(oldActiveMonitoringParams, Formatting.None)
+                );
+                _logger.Debug(
+                    "New Active Monitoring Params ({Count}): {ParamsJson}",
+                    newActiveMonitoringParams.Count,
+                    JsonConvert.SerializeObject(newActiveMonitoringParams, Formatting.None)
+                );
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Fout bij het serialiseren van monitoring params voor logging in HaveMonitoringParametersChanged.");
+                _logger.Error(
+                    ex,
+                    "Fout bij het serialiseren van monitoring params voor logging in HaveMonitoringParametersChanged."
+                );
             }
 
-            bool areSequentiallyEqual = oldActiveMonitoringParams.SequenceEqual(newActiveMonitoringParams);
-            _logger.Debug("HaveMonitoringParametersChanged: Resultaat SequenceEqual was {SeqEqual}. Return: {ReturnValue}", areSequentiallyEqual, !areSequentiallyEqual);
+            bool areSequentiallyEqual = oldActiveMonitoringParams.SequenceEqual(
+                newActiveMonitoringParams
+            );
+            _logger.Debug(
+                "HaveMonitoringParametersChanged: Resultaat SequenceEqual was {SeqEqual}. Return: {ReturnValue}",
+                areSequentiallyEqual,
+                !areSequentiallyEqual
+            );
 
             return !areSequentiallyEqual;
         }
@@ -479,6 +515,7 @@ namespace Data_Logger.Services.Implementations
             {
                 return new UserIdentity(_config.UserName, _config.Password ?? string.Empty);
             }
+
             return new UserIdentity();
         }
 
@@ -603,6 +640,7 @@ namespace Data_Logger.Services.Implementations
                             _session.KeepAlive -= Session_KeepAlive;
                             Utils.SilentDispose(_session);
                         }
+
                         _session = (Session)_reconnectHandler.Session;
                         _session.KeepAlive += Session_KeepAlive;
                     }
@@ -650,9 +688,11 @@ namespace Data_Logger.Services.Implementations
                 }
             }
         }
+
         #endregion
 
         #region Tag Monitoring (Subscriptions)
+
         public async Task StartMonitoringTagsAsync()
         {
             if (!IsConnected || _session == null)
@@ -663,6 +703,7 @@ namespace Data_Logger.Services.Implementations
                 );
                 return;
             }
+
             if (
                 _config == null
                 || _config.TagsToMonitor == null
@@ -697,6 +738,7 @@ namespace Data_Logger.Services.Implementations
                             _config.ConnectionName
                         );
                     }
+
                     _subscription.Dispose();
                     _subscription = null;
                 }
@@ -899,8 +941,10 @@ namespace Data_Logger.Services.Implementations
                         _subscription.Delete(true);
                     }
                     catch
-                    { /* ignore */
+                    {
+                        /* ignore */
                     }
+
                     _subscription.Dispose();
                     _subscription = null;
                 }
@@ -985,9 +1029,11 @@ namespace Data_Logger.Services.Implementations
             };
             TagsDataReceived?.Invoke(this, new List<LoggedTagValue> { loggedValue });
         }
+
         #endregion
 
         #region Data Reading
+
         public async Task<IEnumerable<LoggedTagValue>> ReadCurrentTagValuesAsync()
         {
             if (!IsConnected || _session == null)
@@ -998,6 +1044,7 @@ namespace Data_Logger.Services.Implementations
                 );
                 return Enumerable.Empty<LoggedTagValue>();
             }
+
             if (
                 _config == null
                 || _config.TagsToMonitor == null
@@ -1153,6 +1200,7 @@ namespace Data_Logger.Services.Implementations
                     }
                 }
             }
+
             return loggedValues;
         }
 
@@ -1167,6 +1215,7 @@ namespace Data_Logger.Services.Implementations
                 );
                 return new DataValue(StatusCodes.BadNotConnected);
             }
+
             ReadValueId nodeToRead = new ReadValueId
             {
                 NodeId = nodeId,
@@ -1217,6 +1266,7 @@ namespace Data_Logger.Services.Implementations
                 );
                 return attributes;
             }
+
             uint[] attributeIdsToRead = new uint[]
             {
                 Attributes.NodeId,
@@ -1271,6 +1321,7 @@ namespace Data_Logger.Services.Implementations
                         var dtNode = _session.NodeCache.Find(dtNodeId);
                         val = dtNode?.DisplayName?.Text ?? dtNodeId.ToString();
                     }
+
                     attributes.Add(
                         new NodeAttributeViewModel(attrName, val, response.Results[i].StatusCode)
                     );
@@ -1283,6 +1334,7 @@ namespace Data_Logger.Services.Implementations
                 );
                 _logger.Error(ex, "Error ReadNodeAttributesAsync");
             }
+
             return attributes;
         }
 
@@ -1335,9 +1387,11 @@ namespace Data_Logger.Services.Implementations
                 CancellationToken.None
             );
         }
+
         #endregion
 
         #region Browse
+
         public async Task<ReferenceDescriptionCollection> BrowseAsync(
             NodeId nodeIdToBrowse,
             NodeId referenceTypeId = null,
@@ -1352,6 +1406,7 @@ namespace Data_Logger.Services.Implementations
                 _logger.Warning("BrowseAsync: Not connected.");
                 return new ReferenceDescriptionCollection();
             }
+
             try
             {
                 BrowseDescription nodeToBrowseDesc = new BrowseDescription
@@ -1414,11 +1469,13 @@ namespace Data_Logger.Services.Implementations
                         );
                         break;
                     }
+
                     references.AddRange(browseNextResponse.Results[0].References);
                     continuationPoints.Clear();
                     if (browseNextResponse.Results[0].ContinuationPoint != null)
                         continuationPoints.Add(browseNextResponse.Results[0].ContinuationPoint);
                 }
+
                 return references;
             }
             catch (Exception ex)
@@ -1443,11 +1500,14 @@ namespace Data_Logger.Services.Implementations
                 );
                 return NodeId.Parse(nodeIdString);
             }
+
             return NodeId.Parse(_session.MessageContext, nodeIdString);
         }
+
         #endregion
 
         #region IDisposable
+
         public void Dispose()
         {
             _logger.Debug(
@@ -1461,6 +1521,7 @@ namespace Data_Logger.Services.Implementations
                 {
                     Task.Run(async () => await DisconnectAsync()).Wait(TimeSpan.FromSeconds(2));
                 }
+
                 _subscription?.Dispose();
                 _session?.Dispose();
             }
@@ -1479,6 +1540,160 @@ namespace Data_Logger.Services.Implementations
                 _semaphore?.Dispose();
             }
         }
+
         #endregion
+
+        public async Task<List<NodeSearchResult>> SearchNodesRecursiveAsync(
+            NodeId startNodeId,
+            string regexPattern,
+            bool caseSensitive,
+            int maxDepth = 5,
+            CancellationToken ct = default
+        )
+        {
+            var results = new List<NodeSearchResult>();
+            if (!IsConnected || _session == null || maxDepth < 0)
+            {
+                return results;
+            }
+
+            var regexOptions = caseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
+            Regex regex = null;
+            try
+            {
+                regex = new Regex(regexPattern, regexOptions);
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.Error(
+                    ex,
+                    "Ongeldige RegEx voor SearchNodesRecursiveAsync: {Pattern}",
+                    regexPattern
+                );
+                return results; // Of gooi exception
+            }
+
+            await BrowseAndSearchRecursive(startNodeId, regex, maxDepth, 0, "", results, ct);
+            return results;
+        }
+
+        private async Task BrowseAndSearchRecursive(
+            NodeId currentNodeId,
+            Regex regex,
+            int maxDepth,
+            int currentDepth,
+            string currentPath,
+            List<NodeSearchResult> results,
+            CancellationToken ct
+        )
+        {
+            if (currentDepth > maxDepth || ct.IsCancellationRequested)
+            {
+                return;
+            }
+
+            try
+            {
+                BrowseDescription nodeToBrowse = new BrowseDescription
+                {
+                    NodeId = currentNodeId,
+                    BrowseDirection = BrowseDirection.Forward,
+                    ReferenceTypeId = ReferenceTypeIds.HierarchicalReferences, // Of een andere relevante referentie
+                    IncludeSubtypes = true,
+                    NodeClassMask = (uint)(
+                        NodeClass.Object | NodeClass.Variable | NodeClass.View | NodeClass.Method
+                    ), // Pas aan indien nodig
+                    ResultMask = (uint)BrowseResultMask.All,
+                };
+                BrowseDescriptionCollection nodesToBrowse = new BrowseDescriptionCollection
+                {
+                    nodeToBrowse,
+                };
+
+                // CORRECTIE HIER: BrowseAsync retourneert BrowseResponse
+                BrowseResponse browseResponse = await _session.BrowseAsync(
+                    null,
+                    null,
+                    0,
+                    nodesToBrowse,
+                    ct
+                );
+
+                // Valideer de response (ResponseHeader wordt impliciet gecheckt door ValidateResponse)
+                ClientBase.ValidateResponse(browseResponse.Results, nodesToBrowse);
+                // Optioneel: ClientBase.ValidateDiagnosticInfos(browseResponse.DiagnosticInfos, nodesToBrowse);
+
+                // Werk met browseResponse.Results (dit is de BrowseResultCollection)
+                if (
+                    browseResponse.Results != null
+                    && browseResponse.Results.Count > 0
+                    && StatusCode.IsGood(browseResponse.Results[0].StatusCode)
+                )
+                {
+                    foreach (var rd in browseResponse.Results[0].References) // Referenties van het eerste (en enige) resultaat
+                    {
+                        if (ct.IsCancellationRequested)
+                            break;
+
+                        NodeId targetNodeId = ExpandedNodeId.ToNodeId(
+                            rd.NodeId,
+                            _session.NamespaceUris
+                        );
+                        string displayName = rd.DisplayName?.Text ?? targetNodeId.ToString(); // Gebruik TargetNodeId als fallback voor naam
+                        string newPath = string.IsNullOrEmpty(currentPath)
+                            ? displayName
+                            : $"{currentPath}/{displayName}";
+
+                        if (regex.IsMatch(displayName))
+                        {
+                            // Zorg ervoor dat je niet dezelfde node meerdere keren toevoegt als deze via verschillende paden wordt gevonden
+                            // (tenzij je pad-specifieke resultaten wilt)
+                            if (!results.Any(r => r.NodeId == targetNodeId)) // Simpele check op NodeId
+                            {
+                                results.Add(
+                                    new NodeSearchResult
+                                    {
+                                        NodeId = targetNodeId,
+                                        DisplayName = displayName,
+                                        NodeClass = rd.NodeClass,
+                                        Path = newPath,
+                                    }
+                                );
+                            }
+                        }
+
+                        // Recursief verder zoeken voor Objects en Views (of andere relevante NodeClasses die kinderen kunnen hebben)
+                        if (rd.NodeClass == NodeClass.Object || rd.NodeClass == NodeClass.View)
+                        {
+                            await BrowseAndSearchRecursive(
+                                targetNodeId,
+                                regex,
+                                maxDepth,
+                                currentDepth + 1,
+                                newPath,
+                                results,
+                                ct
+                            );
+                        }
+                    }
+                }
+                else if (browseResponse.Results != null && browseResponse.Results.Count > 0)
+                {
+                    _logger?.Warning(
+                        "Browse operatie voor NodeId {NodeId} gaf een Bad StatusCode terug: {StatusCode}",
+                        currentNodeId,
+                        browseResponse.Results[0].StatusCode
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning(
+                    ex,
+                    "Fout tijdens recursief browsen/zoeken vanaf NodeId {NodeId}",
+                    currentNodeId
+                );
+            }
+        }
     }
 }

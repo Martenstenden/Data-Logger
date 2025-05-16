@@ -1071,19 +1071,19 @@ namespace Data_Logger.Services.Abstractions
 {
     public interface IOpcUaService : IDisposable
     {
-        /// <summary>
-        /// Geeft aan of er een actieve verbinding is met de OPC UA server.
-        /// </summary>
+        
+        
+        
         bool IsConnected { get; }
 
-        /// <summary>
-        /// De namespace tabel van de huidige actieve sessie.
-        /// Is null als er geen actieve sessie is.
-        /// </summary>
+        
+        
+        
+        
         NamespaceTable NamespaceUris { get; }
 
-        /// <summary>
-        /// Event dat wordt getriggerd wanneer de connectiestatus verandert.
+        
+        
         /// </summary>
         event EventHandler ConnectionStatusChanged;
 

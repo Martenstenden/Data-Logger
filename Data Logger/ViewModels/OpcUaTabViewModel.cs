@@ -1,16 +1,20 @@
-﻿using System;
+﻿// Data Logger/Data Logger/ViewModels/OpcUaTabViewModel.cs
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Data; // Nodig voor BindingOperations en CollectionViewSource
 using System.Windows.Input;
-using Data_Logger;
 using Data_Logger.Core;
 using Data_Logger.Enums;
 using Data_Logger.Models;
-using Data_Logger.Services.Abstractions;
+using Data_Logger.Services.Abstractions; // Voor IOpcUaService & NodeSearchResult
+using Data_Logger.Services.Implementations; // Voor OpcUaService (als NodeSearchResult daar staat)
 using Opc.Ua;
 using Serilog;
 
@@ -32,14 +36,23 @@ namespace Data_Logger.ViewModels
         private bool _disposedValue;
 
         private PlotTabViewModel _selectedPlotTab;
+
+        private string _nodeFilterText;
+        private bool _useNodeRegexFilter;
+        private readonly object _rootNodesLock = new object(); // Lock voor RootNodes
+
+        private NodeSearchResult _selectedServerSearchResult;
+        private ObservableCollection<NodeSearchResult> _serverSearchResults;
+        private bool _isSearchingOnServer;
         #endregion
 
         #region Properties
-        public OpcUaConnectionConfig OpcUaConfig =>
-            ConnectionConfiguration as OpcUaConnectionConfig;
+        public OpcUaConnectionConfig OpcUaConfig => ConnectionConfiguration as OpcUaConnectionConfig;
         public bool IsConnected => _opcUaService?.IsConnected ?? false;
 
-        public ObservableCollection<OpcUaNodeViewModel> RootNodes { get; }
+        public ObservableCollection<OpcUaNodeViewModel> RootNodes { get; } // Broncollectie
+        public ICollectionView FilteredRootNodesView { get; } // View voor TreeView
+
         public ObservableCollection<NodeAttributeViewModel> SelectedNodeAttributes { get; }
         public ObservableCollection<ReferenceDescriptionViewModel> SelectedNodeReferences { get; }
 
@@ -49,7 +62,7 @@ namespace Data_Logger.ViewModels
             set
             {
                 if (SetProperty(ref _isBrowseAddressSpace, value))
-                    UpdateCommandStates();
+                    UpdateCommandStates(); // Afhankelijk van je logica voor LoadAddressSpaceCommand
             }
         }
 
@@ -72,11 +85,8 @@ namespace Data_Logger.ViewModels
             {
                 if (SetProperty(ref _selectedOpcUaNodeInTree, value))
                 {
-                    _logger.Debug(
-                        "Geselecteerde OPC UA Node in TreeView: {DisplayName}",
-                        _selectedOpcUaNodeInTree?.DisplayName ?? "null"
-                    );
-                    UpdateCommandStates();
+                    _logger.Debug("Geselecteerde OPC UA Node in TreeView: {DisplayName}", _selectedOpcUaNodeInTree?.DisplayName ?? "null");
+                    UpdateCommandStates(); // Voor knoppen die afhangen van selectie
                     if (_selectedOpcUaNodeInTree != null && IsConnected)
                     {
                         Task.Run(async () => await LoadSelectedNodeDetailsAsync());
@@ -93,11 +103,66 @@ namespace Data_Logger.ViewModels
             }
         }
 
+        public string NodeFilterText
+        {
+            get => _nodeFilterText;
+            set
+            {
+                if (SetProperty(ref _nodeFilterText, value))
+                {
+                    RefreshTreeViewFilter();
+                    ((RelayCommand)SearchOnServerCommand).RaiseCanExecuteChanged();
+                }
+            }
+        }
+
+        public bool UseNodeRegexFilter
+        {
+            get => _useNodeRegexFilter;
+            set
+            {
+                if (SetProperty(ref _useNodeRegexFilter, value))
+                {
+                    RefreshTreeViewFilter();
+                    ((RelayCommand)SearchOnServerCommand).RaiseCanExecuteChanged(); // Ook hier CanExecute updaten
+                }
+            }
+        }
+        
         public ObservableCollection<PlotTabViewModel> ActivePlotTabs { get; }
         public PlotTabViewModel SelectedPlotTab
         {
             get => _selectedPlotTab;
             set => SetProperty(ref _selectedPlotTab, value);
+        }
+
+        public ObservableCollection<NodeSearchResult> ServerSearchResults
+        {
+            get => _serverSearchResults;
+            set => SetProperty(ref _serverSearchResults, value);
+        }
+
+        public bool IsSearchingOnServer
+        {
+            get => _isSearchingOnServer;
+            set
+            {
+                if(SetProperty(ref _isSearchingOnServer, value))
+                {
+                    ((RelayCommand)SearchOnServerCommand).RaiseCanExecuteChanged();
+                }
+            }
+        }
+        public NodeSearchResult SelectedServerSearchResult
+        {
+            get => _selectedServerSearchResult;
+            set
+            {
+                if (SetProperty(ref _selectedServerSearchResult, value))
+                {
+                    ((RelayCommand)MonitorFoundNodeCommand).RaiseCanExecuteChanged();
+                }
+            }
         }
         #endregion
 
@@ -112,11 +177,11 @@ namespace Data_Logger.ViewModels
         public ICommand UnmonitorTagFromListCommand { get; }
         public ICommand OpenNewPlotTabCommand { get; }
         public ICommand AddTagToPlotCommand { get; }
-
         public ICommand AddSelectedTagToCurrentPlotCommand { get; }
+        public ICommand SearchOnServerCommand { get; }
+        public ICommand MonitorFoundNodeCommand { get; }
         #endregion
 
-        #region Constructor
         public OpcUaTabViewModel(
             OpcUaConnectionConfig config,
             ILogger logger,
@@ -124,28 +189,24 @@ namespace Data_Logger.ViewModels
             IStatusService statusService,
             IDataLoggingService dataLoggingService,
             ISettingsService settingsService
-        )
-            : base(config)
+        ) : base(config)
         {
-            _logger =
-                logger
-                    ?.ForContext<OpcUaTabViewModel>()
-                    .ForContext(
-                        "ConnectionName",
-                        config?.ConnectionName ?? "UnknownOpcUaConnection"
-                    ) ?? throw new ArgumentNullException(nameof(logger));
+            _logger = logger?.ForContext<OpcUaTabViewModel>().ForContext("ConnectionName", config?.ConnectionName ?? "UnknownOpcUa")
+                ?? throw new ArgumentNullException(nameof(logger));
             _opcUaService = opcUaService ?? throw new ArgumentNullException(nameof(opcUaService));
-            _statusService =
-                statusService ?? throw new ArgumentNullException(nameof(statusService));
-            _dataLoggingService =
-                dataLoggingService ?? throw new ArgumentNullException(nameof(dataLoggingService));
-            _settingsService =
-                settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+            _statusService = statusService ?? throw new ArgumentNullException(nameof(statusService));
+            _dataLoggingService = dataLoggingService ?? throw new ArgumentNullException(nameof(dataLoggingService));
+            _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
 
             RootNodes = new ObservableCollection<OpcUaNodeViewModel>();
+            BindingOperations.EnableCollectionSynchronization(RootNodes, _rootNodesLock); // Synchronisatie activeren
+            FilteredRootNodesView = CollectionViewSource.GetDefaultView(RootNodes);
+            FilteredRootNodesView.Filter = ApplyNodeFilter;
+
             SelectedNodeAttributes = new ObservableCollection<NodeAttributeViewModel>();
             SelectedNodeReferences = new ObservableCollection<ReferenceDescriptionViewModel>();
             ActivePlotTabs = new ObservableCollection<PlotTabViewModel>();
+            ServerSearchResults = new ObservableCollection<NodeSearchResult>();
 
             if (OpcUaConfig != null && OpcUaConfig.TagsToMonitor == null)
             {
@@ -153,94 +214,211 @@ namespace Data_Logger.ViewModels
             }
 
             ConnectCommand = new RelayCommand(async _ => await ConnectAsync(), _ => !IsConnected);
-            DisconnectCommand = new RelayCommand(
-                async _ => await DisconnectAsync(),
-                _ => IsConnected
-            );
-            ReadAllConfiguredTagsCommand = new RelayCommand(
-                async _ => await ReadAllConfiguredTagsAsync(),
-                _ => IsConnected
-            );
-            LoadAddressSpaceCommand = new RelayCommand(
-                async _ => await LoadInitialAddressSpaceAsync(),
-                _ => IsConnected && !IsBrowseAddressSpace
-            );
-
-            AddSelectedNodeToMonitoringCommand = new RelayCommand(
-                param =>
-                    AddNodeToMonitoring(param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree),
-                param =>
-                    CanAddNodeToMonitoring(param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree)
-            );
-            RemoveSelectedNodeFromMonitoringCommand = new RelayCommand(
-                param =>
-                    RemoveNodeFromMonitoring(
-                        param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree
-                    ),
-                param =>
-                    CanRemoveNodeFromMonitoring(
-                        param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree
-                    )
-            );
-            ReadSelectedNodeValueCommand = new RelayCommand(
-                async param =>
-                    await ReadNodeValueAsync(
-                        param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree
-                    ),
-                param => CanReadNodeValue(param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree)
-            );
-            UnmonitorTagFromListCommand = new RelayCommand(
-                param => UnmonitorTag(param as OpcUaTagConfig),
-                param => param is OpcUaTagConfig
-            );
-
-            AddTagToPlotCommand = new RelayCommand(
-                ExecuteAddTagToPlot,
-                CanExecuteAddTagToPlotParameter
-            );
-            OpenNewPlotTabCommand = new RelayCommand(
-                ExecuteOpenNewPlotTabForSelected,
-                CanExecuteOpenNewPlotTabForSelected
-            );
-
-            AddSelectedTagToCurrentPlotCommand = new RelayCommand(
-                ExecuteAddSelectedTagToCurrentPlot,
-                CanExecuteAddSelectedTagToCurrentPlot
-            );
+            DisconnectCommand = new RelayCommand(async _ => await DisconnectAsync(), _ => IsConnected);
+            ReadAllConfiguredTagsCommand = new RelayCommand(async _ => await ReadAllConfiguredTagsAsync(), _ => IsConnected && (OpcUaConfig?.TagsToMonitor.Any(t => t.IsActive) ?? false) );
+            LoadAddressSpaceCommand = new RelayCommand(async _ => await LoadInitialAddressSpaceAsync(), _ => IsConnected && !IsBrowseAddressSpace);
+            AddSelectedNodeToMonitoringCommand = new RelayCommand(param => AddNodeToMonitoring(param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree), param => CanAddNodeToMonitoring(param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree));
+            RemoveSelectedNodeFromMonitoringCommand = new RelayCommand(param => RemoveNodeFromMonitoring(param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree), param => CanRemoveNodeFromMonitoring(param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree));
+            ReadSelectedNodeValueCommand = new RelayCommand(async param => await ReadNodeValueAsync(param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree), param => CanReadNodeValue(param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree));
+            UnmonitorTagFromListCommand = new RelayCommand(param => UnmonitorTag(param as OpcUaTagConfig), param => param is OpcUaTagConfig);
+            AddTagToPlotCommand = new RelayCommand(ExecuteAddTagToPlot, CanExecuteAddTagToPlotParameter);
+            OpenNewPlotTabCommand = new RelayCommand(ExecuteOpenNewPlotTabForSelected, CanExecuteOpenNewPlotTabForSelected);
+            AddSelectedTagToCurrentPlotCommand = new RelayCommand(ExecuteAddSelectedTagToCurrentPlot, CanExecuteAddSelectedTagToCurrentPlot);
+            SearchOnServerCommand = new RelayCommand(async _ => await ExecuteSearchOnServerAsync(), _ => IsConnected && !string.IsNullOrWhiteSpace(NodeFilterText) && !IsSearchingOnServer);
+            MonitorFoundNodeCommand = new RelayCommand(ExecuteMonitorFoundNode, CanExecuteMonitorFoundNode);
 
             _opcUaService.ConnectionStatusChanged += OnOpcUaConnectionStatusChanged;
             _opcUaService.TagsDataReceived += OnOpcUaTagsDataReceived;
 
             _logger.Debug("OpcUaTabViewModel geïnitialiseerd voor {ConnectionName}", DisplayName);
         }
-        #endregion
+
+        public void RefreshTreeViewFilter()
+        {
+            Application.Current?.Dispatcher.Invoke(() =>
+            {
+                _logger?.Debug("RefreshTreeViewFilter aangeroepen in OpcUaTabViewModel.");
+                try
+                {
+                    FilteredRootNodesView?.Refresh();
+                    _logger?.Debug("RefreshTreeViewFilter: FilteredRootNodesView.Refresh() voltooid.");
+                }
+                catch (Exception ex)
+                {
+                    _logger?.Error(ex, "RefreshTreeViewFilter: Fout tijdens FilteredRootNodesView.Refresh().");
+                }            });
+        }
+
+        private bool ApplyNodeFilter(object item)
+        {
+            if (item is OpcUaNodeViewModel node)
+            {
+                if (string.IsNullOrWhiteSpace(NodeFilterText))
+                {
+                    SetVisibilityRecursive(node, true); // Maak de hele sub-tree zichtbaar
+                    return true; // De root node zelf is altijd zichtbaar als er geen filter is
+                }
+                return UpdateAndCheckVisibilityRecursive(node, NodeFilterText, UseNodeRegexFilter);
+            }
+            return false;
+        }
+
+        private void SetVisibilityRecursive(OpcUaNodeViewModel node, bool visible)
+        {
+            if (node == null) return;
+            node.IsVisible = visible;
+            if (node.Children != null) // Check Children, niet FilteredChildrenView
+            {
+                foreach (var child in node.Children.Where(c => c != null)) // Itereren over de *echte* kinderen
+                {
+                    SetVisibilityRecursive(child, visible);
+                }
+            }
+            // Na het aanpassen van IsVisible van kinderen, moet hun view ook refreshen
+            // Dit is belangrijk voor de HierarchicalDataTemplate binding aan FilteredChildrenView
+            Application.Current?.Dispatcher.Invoke(() => node.FilteredChildrenView?.Refresh());
+        }
+
+        private bool UpdateAndCheckVisibilityRecursive(OpcUaNodeViewModel node, string filterText, bool useRegex)
+        {
+            if (node == null) return false;
+
+            bool selfMatches = false;
+            if (!string.IsNullOrWhiteSpace(filterText))
+            {
+                string nodeTextToMatch = node.DisplayName;
+                if (useRegex)
+                {
+                    try { selfMatches = Regex.IsMatch(nodeTextToMatch, filterText, RegexOptions.IgnoreCase); }
+                    catch (ArgumentException ex) { _logger.Debug(ex, "Ongeldige RegEx: {Pattern}", filterText); selfMatches = false; }
+                }
+                else
+                {
+                    selfMatches = nodeTextToMatch.IndexOf(filterText, StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+            }
+            else
+            {
+                selfMatches = true; // Geen filter, dus node zelf is 'zichtbaar' qua match
+            }
+
+            bool anyChildMatches = false;
+            if (node.Children != null && node.Children.Any(c => c != null)) // Alleen als er kinderen zijn (en geen dummy null)
+            {
+                foreach (var child in node.Children.Where(c => c != null))
+                {
+                    if (UpdateAndCheckVisibilityRecursive(child, filterText, useRegex))
+                    {
+                        anyChildMatches = true;
+                    }
+                }
+            }
+
+            node.IsVisible = selfMatches || anyChildMatches;
+            // Application.Current?.Dispatcher.Invoke(() => node.FilteredChildrenView?.Refresh());
+            return node.IsVisible;
+        }
+        
+        private async Task ExecuteSearchOnServerAsync()
+        {
+            if (!IsConnected || string.IsNullOrWhiteSpace(NodeFilterText) || _opcUaService == null)
+            {
+                _logger.Warning("Kan niet zoeken op server: niet verbonden, geen filtertekst, of service is null.");
+                return;
+            }
+
+            IsSearchingOnServer = true;
+            _logger.Information("Start zoekopdracht op server met RegEx: {Pattern}, CaseSensitive: {CaseSensitive}", NodeFilterText, !UseNodeRegexFilter); // Aangenomen dat UseNodeRegexFilter = true betekent case-insensitive
+            
+            await Application.Current.Dispatcher.InvokeAsync(() => ServerSearchResults.Clear() );
+            _statusService.SetStatus(ApplicationStatus.Loading, $"Zoeken op OPC server met filter: {NodeFilterText}...");
+
+            try
+            {
+                var results = await _opcUaService.SearchNodesRecursiveAsync(
+                    ObjectIds.ObjectsFolder, 
+                    NodeFilterText, 
+                    caseSensitive: !UseNodeRegexFilter, // Als UseNodeRegexFilter true is, is het IgnoreCase. Dus caseSensitive is de inverse.
+                    maxDepth: 5); // Max diepte, configureerbaar maken?
+                
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    lock(_rootNodesLock) // Lock voor ServerSearchResults als deze ook een View heeft
+                    {
+                        foreach (var res in results) ServerSearchResults.Add(res);
+                    }
+                    _logger.Information("Zoekopdracht voltooid, {Count} resultaten gevonden.", results.Count);
+                    _statusService.SetStatus(ApplicationStatus.Idle, $"{results.Count} nodes gevonden met filter '{NodeFilterText}'.");
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Fout tijdens zoeken op server.");
+                _statusService.SetStatus(ApplicationStatus.Error, $"Fout bij zoeken: {ex.Message}");
+            }
+            finally
+            {
+                IsSearchingOnServer = false;
+            }
+        }
+        
+        private bool CanExecuteMonitorFoundNode(object parameter)
+        {
+            var searchResult = parameter as NodeSearchResult ?? SelectedServerSearchResult;
+            if (searchResult == null || OpcUaConfig?.TagsToMonitor == null) return false;
+            bool isMonitorableClass = searchResult.NodeClass == NodeClass.Variable || searchResult.NodeClass == NodeClass.VariableType;
+            bool isAlreadyMonitored = OpcUaConfig.TagsToMonitor.Any(t => t.NodeId == searchResult.NodeId.ToString());
+            return isMonitorableClass && !isAlreadyMonitored;
+        }
+
+        private void ExecuteMonitorFoundNode(object parameter)
+        {
+            var searchResult = parameter as NodeSearchResult ?? SelectedServerSearchResult;
+            if (searchResult == null || !CanExecuteMonitorFoundNode(searchResult)) return;
+
+            var newTagConfig = new OpcUaTagConfig
+            {
+                TagName = searchResult.DisplayName,
+                NodeId = searchResult.NodeId.ToString(),
+                IsActive = true,
+                SamplingInterval = OpcUaConfig?.TagsToMonitor?.FirstOrDefault()?.SamplingInterval ?? 1000,
+                DataType = OpcUaDataType.Variant,
+                IsAlarmingEnabled = false,
+                IsOutlierDetectionEnabled = false,
+                BaselineSampleSize = 20,
+                OutlierStandardDeviationFactor = 3.0,
+                AlarmMessageFormat = "{TagName} is in alarm ({AlarmState}) met waarde {Value}",
+            };
+            newTagConfig.ResetBaselineState();
+
+            OpcUaConfig.TagsToMonitor.Add(newTagConfig);
+            _logger.Information("Node '{NodeId}' ({DisplayName}) uit server zoekresultaten toegevoegd aan monitoring.", newTagConfig.NodeId, newTagConfig.TagName);
+            _statusService.SetStatus(ApplicationStatus.Saving, $"Node '{newTagConfig.TagName}' toegevoegd & instellingen opslaan...");
+
+            SaveChangesForTagConfig(newTagConfig);
+            ((RelayCommand)MonitorFoundNodeCommand).RaiseCanExecuteChanged();
+            // Update ook de CanExecute voor de treeview knoppen als de geselecteerde node nu gemonitord wordt
+            ((RelayCommand)AddSelectedNodeToMonitoringCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)RemoveSelectedNodeFromMonitoringCommand).RaiseCanExecuteChanged();
+        }
 
         #region Connection and Data Handling
         private async Task ConnectAsync()
         {
-            _statusService.SetStatus(
-                ApplicationStatus.Connecting,
-                $"Verbinden met OPC UA: {OpcUaConfig?.ConnectionName}..."
-            );
+            _statusService.SetStatus(ApplicationStatus.Connecting, $"Verbinden met OPC UA: {OpcUaConfig?.ConnectionName}...");
             _logger.Information("Verbindingspoging gestart voor {ConnectionName}...", DisplayName);
             ResetAllTagBaselinesAndAlarms();
             bool success = await _opcUaService.ConnectAsync();
             if (success)
             {
-                _statusService.SetStatus(
-                    ApplicationStatus.Logging,
-                    $"Verbonden met OPC UA: {OpcUaConfig?.ConnectionName}."
-                );
+                _statusService.SetStatus(ApplicationStatus.Logging, $"Verbonden met OPC UA: {OpcUaConfig?.ConnectionName}.");
                 _logger.Information("Verbinding succesvol voor {ConnectionName}.", DisplayName);
-                await LoadInitialAddressSpaceAsync();
-                await _opcUaService.StartMonitoringTagsAsync();
+                await LoadInitialAddressSpaceAsync(); // Laad address space na succesvolle verbinding
+                await _opcUaService.StartMonitoringTagsAsync(); // Start monitoring van geconfigureerde tags
             }
             else
             {
-                _statusService.SetStatus(
-                    ApplicationStatus.Error,
-                    $"Kon niet verbinden met OPC UA: {OpcUaConfig?.ConnectionName}."
-                );
+                _statusService.SetStatus(ApplicationStatus.Error, $"Kon niet verbinden met OPC UA: {OpcUaConfig?.ConnectionName}.");
                 _logger.Warning("Verbinding mislukt voor {ConnectionName}.", DisplayName);
             }
             UpdateCommandStates();
@@ -251,57 +429,55 @@ namespace Data_Logger.ViewModels
             _logger.Information("Verbinding verbreken voor {ConnectionName}...", DisplayName);
             await _opcUaService.StopMonitoringTagsAsync();
             await _opcUaService.DisconnectAsync();
-            _statusService.SetStatus(
-                ApplicationStatus.Idle,
-                $"OPC UA verbinding verbroken: {OpcUaConfig?.ConnectionName}."
-            );
+            _statusService.SetStatus(ApplicationStatus.Idle, $"OPC UA verbinding verbroken: {OpcUaConfig?.ConnectionName}.");
             _logger.Information("Verbinding verbroken voor {ConnectionName}.", DisplayName);
-            Application.Current?.Dispatcher.Invoke(() =>
+            
+            await Application.Current.Dispatcher.InvokeAsync(() => // UI updates op UI thread
             {
-                RootNodes.Clear();
+                lock (_rootNodesLock) { RootNodes.Clear(); }
                 SelectedNodeAttributes.Clear();
                 SelectedNodeReferences.Clear();
+                ServerSearchResults.Clear(); // Wis ook zoekresultaten
                 ActivePlotTabs.Clear();
                 SelectedPlotTab = null;
+                SelectedOpcUaNodeInTree = null; // Reset selectie
             });
             UpdateCommandStates();
         }
 
         private void OnOpcUaConnectionStatusChanged(object sender, EventArgs e)
         {
-            _logger.Debug(
-                "OpcUaConnectionStatusChanged. IsConnected: {IsConnected} voor {ConnectionName}",
-                _opcUaService.IsConnected,
-                DisplayName
-            );
-            OnPropertyChanged(nameof(IsConnected));
+            _logger.Debug("OpcUaConnectionStatusChanged. IsConnected: {IsConnected} voor {ConnectionName}", _opcUaService.IsConnected, DisplayName);
+            OnPropertyChanged(nameof(IsConnected)); // Voor UI bindings
             UpdateCommandStates();
 
             if (!_opcUaService.IsConnected)
             {
                 Application.Current?.Dispatcher.Invoke(() =>
                 {
-                    RootNodes.Clear();
+                    lock(_rootNodesLock) { RootNodes.Clear(); }
                     SelectedNodeAttributes.Clear();
                     SelectedNodeReferences.Clear();
+                    ServerSearchResults.Clear();
                     ActivePlotTabs.Clear();
                     SelectedPlotTab = null;
+                    SelectedOpcUaNodeInTree = null;
+                    _logger.Information("UI elementen gewist vanwege disconnect voor {ConnectionName}", DisplayName);
                 });
             }
-            else
+            else // Zojuist verbonden
             {
                 ResetAllTagBaselinesAndAlarms();
+                // Laad address space alleen als het nog niet geladen is of als de browse modus niet actief is
                 if (!RootNodes.Any() && !IsBrowseAddressSpace)
                 {
                     Task.Run(async () => await LoadInitialAddressSpaceAsync());
                 }
+                // Herstart monitoring van tags indien nodig (gebeurt nu in ConnectAsync en Reconfigure)
             }
         }
 
-        private void OnOpcUaTagsDataReceived(
-            object sender,
-            IEnumerable<LoggedTagValue> receivedTagValues
-        )
+        private void OnOpcUaTagsDataReceived(object sender, IEnumerable<LoggedTagValue> receivedTagValues)
         {
             var tagValuesList = receivedTagValues?.ToList() ?? new List<LoggedTagValue>();
             if (!tagValuesList.Any())
@@ -383,11 +559,8 @@ namespace Data_Logger.ViewModels
                         {
                             if (TryConvertToDouble(liveValue.Value, out double numericValue))
                             {
-                                
                                 foreach (var plotTab in ActivePlotTabs)
                                 {
-                                    
-                                    
                                     if (
                                         plotTab.PlotModel.Series.Any(s =>
                                             s.Title == configuredTag.TagName
@@ -418,7 +591,7 @@ namespace Data_Logger.ViewModels
                                 configuredTag.NodeId,
                                 liveValue.IsGoodQuality,
                                 liveValue.ErrorMessage
-                            ); 
+                            );
                         }
                     }
                     else
@@ -771,7 +944,7 @@ namespace Data_Logger.ViewModels
         #endregion
 
         #region Configuration Handling
-        public void UpdateConfiguration(OpcUaConnectionConfig newConfig)
+public void UpdateConfiguration(OpcUaConnectionConfig newConfig)
         {
             _logger.Information(
                 "Warme configuratie update (via Settings) voor OPC UA verbinding {ConnectionName}",
@@ -840,14 +1013,18 @@ namespace Data_Logger.ViewModels
         #region Node Browser Logic
         private async Task LoadInitialAddressSpaceAsync()
         {
-            if (!IsConnected || _opcUaService == null || IsBrowseAddressSpace)
+            if (!IsConnected || _opcUaService == null) return;
+            if (IsBrowseAddressSpace) // Voorkom dubbel laden als al bezig
+            {
+                _logger.Debug("LoadInitialAddressSpaceAsync: Al bezig met browsen, aanroep genegeerd.");
                 return;
+            }
+
             IsBrowseAddressSpace = true;
-            _logger.Information(
-                "Laden van initiële OPC UA address space voor {ConnectionName}",
-                DisplayName
-            );
-            Application.Current?.Dispatcher.Invoke(() => RootNodes.Clear());
+            _logger.Information("Laden van initiële OPC UA address space voor {ConnectionName}", DisplayName);
+            _statusService.SetStatus(ApplicationStatus.Loading, $"Address space laden voor {DisplayName}...");
+            
+            var tempRootNodes = new List<OpcUaNodeViewModel>();
             try
             {
                 ReferenceDescriptionCollection rootItems = await _opcUaService.BrowseRootAsync();
@@ -856,56 +1033,33 @@ namespace Data_Logger.ViewModels
                     var namespaceUris = _opcUaService.NamespaceUris;
                     foreach (var item in rootItems)
                     {
-                        bool hasChildren =
-                            item.NodeClass == NodeClass.Object || item.NodeClass == NodeClass.View;
-                        NodeId nodeId = null;
-                        try
-                        {
-                            nodeId = ExpandedNodeId.ToNodeId(item.NodeId, namespaceUris);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.Error(
-                                ex,
-                                "Fout bij converteren root ExpandedNodeId {ExpNodeId} voor {ItemDisplayName}",
-                                item.NodeId,
-                                item.DisplayName?.Text
-                            );
-                            continue;
-                        }
-
+                        bool hasChildren = (item.NodeClass == NodeClass.Object || item.NodeClass == NodeClass.View);
+                        NodeId nodeId = ExpandedNodeId.ToNodeId(item.NodeId, namespaceUris);
                         if (nodeId != null)
                         {
-                            Application.Current?.Dispatcher.Invoke(() =>
-                                RootNodes.Add(
-                                    new OpcUaNodeViewModel(
-                                        nodeId,
-                                        item.DisplayName?.Text ?? "Unknown",
-                                        item.NodeClass,
-                                        _opcUaService,
-                                        _logger,
-                                        hasChildren
-                                    )
-                                )
-                            );
+                            tempRootNodes.Add(new OpcUaNodeViewModel(nodeId, item.DisplayName?.Text ?? "Unknown", item.NodeClass, _opcUaService, _logger, hasChildren));
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.Error(
-                    ex,
-                    "Fout bij het laden van de initiële address space voor {ConnectionName}",
-                    DisplayName
-                );
-                _statusService.SetStatus(
-                    ApplicationStatus.Error,
-                    $"Fout bij laden address space: {ex.Message}"
-                );
+                _logger.Error(ex, "Fout bij het laden van de initiële address space voor {ConnectionName}", DisplayName);
+                _statusService.SetStatus(ApplicationStatus.Error, $"Fout bij laden address space: {ex.Message}");
             }
             finally
             {
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    lock (_rootNodesLock)
+                    {
+                        RootNodes.Clear();
+                        foreach (var node in tempRootNodes) RootNodes.Add(node);
+                    }
+                    RefreshTreeViewFilter(); // Past filter toe op de nieuwe root nodes
+                    _logger.Information("RootNodes bijgewerkt ({Count} items) en filter toegepast.", RootNodes.Count);
+                    _statusService.SetStatus(ApplicationStatus.Idle, $"Address space geladen voor {DisplayName}.");
+                });
                 IsBrowseAddressSpace = false;
             }
         }
@@ -1015,7 +1169,7 @@ namespace Data_Logger.ViewModels
         #endregion
 
         #region Monitoring Configuration from TreeView / List
-        private bool CanAddNodeToMonitoring(OpcUaNodeViewModel node)
+private bool CanAddNodeToMonitoring(OpcUaNodeViewModel node)
         {
             if (node == null)
                 return false;
@@ -1121,7 +1275,7 @@ namespace Data_Logger.ViewModels
         #endregion
 
         #region Node Interaction Commands (Read Value)
-        private bool CanReadNodeValue(OpcUaNodeViewModel node)
+private bool CanReadNodeValue(OpcUaNodeViewModel node)
         {
             if (node == null)
                 node = SelectedOpcUaNodeInTree;
@@ -1327,11 +1481,9 @@ namespace Data_Logger.ViewModels
                 tagConfigToAdd = OpcUaConfig?.TagsToMonitor.FirstOrDefault(t =>
                     t.NodeId == SelectedOpcUaNodeInTree.NodeId.ToString()
                 );
-            
 
             if (SelectedPlotTab != null && tagConfigToAdd != null && tagConfigToAdd.IsActive)
             {
-                
                 return !SelectedPlotTab.PlotModel.Series.Any(s =>
                     s.Title == tagConfigToAdd.TagName
                 );
@@ -1351,46 +1503,66 @@ namespace Data_Logger.ViewModels
                 tagConfigToAdd = OpcUaConfig?.TagsToMonitor.FirstOrDefault(t =>
                     t.NodeId == SelectedOpcUaNodeInTree.NodeId.ToString()
                 );
-                
+
                 if (tagConfigToAdd == null)
                 {
-                    _logger.Warning("ExecuteAddSelectedTagToCurrentPlot: Geselecteerde node '{SelectedNode}' is geen actieve, gemonitorde tag.", SelectedOpcUaNodeInTree.DisplayName);
-                    MessageBox.Show($"Node '{SelectedOpcUaNodeInTree.DisplayName}' wordt niet actief gemonitord. Voeg het eerst toe aan monitoring.", "Tag niet gemonitord", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    _logger.Warning(
+                        "ExecuteAddSelectedTagToCurrentPlot: Geselecteerde node '{SelectedNode}' is geen actieve, gemonitorde tag.",
+                        SelectedOpcUaNodeInTree.DisplayName
+                    );
+                    MessageBox.Show(
+                        $"Node '{SelectedOpcUaNodeInTree.DisplayName}' wordt niet actief gemonitord. Voeg het eerst toe aan monitoring.",
+                        "Tag niet gemonitord",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning
+                    );
                     return;
                 }
             }
-                
-            
 
             if (SelectedPlotTab != null && tagConfigToAdd != null && tagConfigToAdd.IsActive)
             {
                 if (SelectedPlotTab.PlotModel.Series.Any(s => s.Title == tagConfigToAdd.TagName))
                 {
-                    _logger.Information("Tag '{TagName}' is al aanwezig in de huidige plot tab '{PlotTabTitle}'.", tagConfigToAdd.TagName, SelectedPlotTab.Header);
-                    MessageBox.Show($"Tag '{tagConfigToAdd.TagName}' is al aanwezig in deze grafiek.", "Tag al geplot", MessageBoxButton.OK, MessageBoxImage.Information);
+                    _logger.Information(
+                        "Tag '{TagName}' is al aanwezig in de huidige plot tab '{PlotTabTitle}'.",
+                        tagConfigToAdd.TagName,
+                        SelectedPlotTab.Header
+                    );
+                    MessageBox.Show(
+                        $"Tag '{tagConfigToAdd.TagName}' is al aanwezig in deze grafiek.",
+                        "Tag al geplot",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information
+                    );
                     return;
                 }
-                
+
                 _logger.Information(
                     "Voegt tag '{TagName}' als series toe aan de huidige plot tab '{PlotTabTitle}'",
                     tagConfigToAdd.TagName,
                     SelectedPlotTab.Header
                 );
-                SelectedPlotTab.EnsureSeriesExists(tagConfigToAdd.TagName, tagConfigToAdd.TagName); 
-                
-                
+                SelectedPlotTab.EnsureSeriesExists(tagConfigToAdd.TagName, tagConfigToAdd.TagName);
+
                 SelectedPlotTab.EnsureSeriesExists(tagConfigToAdd.TagName, tagConfigToAdd.TagName);
                 (AddSelectedTagToCurrentPlotCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
             else
             {
                 if (SelectedPlotTab == null)
-                    _logger.Warning("ExecuteAddSelectedTagToCurrentPlot: Geen actieve plot tab geselecteerd.");
+                    _logger.Warning(
+                        "ExecuteAddSelectedTagToCurrentPlot: Geen actieve plot tab geselecteerd."
+                    );
                 else if (tagConfigToAdd == null)
-                    _logger.Warning("ExecuteAddSelectedTagToCurrentPlot: Geen tag geselecteerd om toe te voegen.");
+                    _logger.Warning(
+                        "ExecuteAddSelectedTagToCurrentPlot: Geen tag geselecteerd om toe te voegen."
+                    );
                 else if (!tagConfigToAdd.IsActive)
-                    _logger.Warning("ExecuteAddSelectedTagToCurrentPlot: Geselecteerde tag '{TagName}' is niet actief.",
-                        tagConfigToAdd.TagName);
+                    _logger.Warning(
+                        "ExecuteAddSelectedTagToCurrentPlot: Geselecteerde tag '{TagName}' is niet actief.",
+                        tagConfigToAdd.TagName
+                    );
             }
         }
 
@@ -1414,16 +1586,20 @@ namespace Data_Logger.ViewModels
         {
             Application.Current?.Dispatcher.Invoke(() =>
             {
-                (ConnectCommand as RelayCommand)?.RaiseCanExecuteChanged();
-                (DisconnectCommand as RelayCommand)?.RaiseCanExecuteChanged();
-                (ReadAllConfiguredTagsCommand as RelayCommand)?.RaiseCanExecuteChanged();
-                (LoadAddressSpaceCommand as RelayCommand)?.RaiseCanExecuteChanged();
-                (AddSelectedNodeToMonitoringCommand as RelayCommand)?.RaiseCanExecuteChanged();
-                (RemoveSelectedNodeFromMonitoringCommand as RelayCommand)?.RaiseCanExecuteChanged();
-                (ReadSelectedNodeValueCommand as RelayCommand)?.RaiseCanExecuteChanged();
-                (UnmonitorTagFromListCommand as RelayCommand)?.RaiseCanExecuteChanged();
-                (OpenNewPlotTabCommand as RelayCommand)?.RaiseCanExecuteChanged();
-                (AddTagToPlotCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                ((RelayCommand)ConnectCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)DisconnectCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)ReadAllConfiguredTagsCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)LoadAddressSpaceCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)AddSelectedNodeToMonitoringCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)RemoveSelectedNodeFromMonitoringCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)ReadSelectedNodeValueCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)UnmonitorTagFromListCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)OpenNewPlotTabCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)AddTagToPlotCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)SearchOnServerCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)MonitorFoundNodeCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)AddSelectedTagToCurrentPlotCommand).RaiseCanExecuteChanged();
+
             });
         }
 
@@ -1439,22 +1615,20 @@ namespace Data_Logger.ViewModels
             {
                 if (disposing)
                 {
-                    _logger.Debug(
-                        "Dispose(true) aangeroepen voor OpcUaTabViewModel: {ConnectionName}",
-                        DisplayName
-                    );
+                    _logger.Debug("Dispose(true) aangeroepen voor OpcUaTabViewModel: {ConnectionName}", DisplayName);
                     if (_opcUaService != null)
                     {
                         _opcUaService.ConnectionStatusChanged -= OnOpcUaConnectionStatusChanged;
                         _opcUaService.TagsDataReceived -= OnOpcUaTagsDataReceived;
                         _opcUaService.Dispose();
                     }
-                    Application.Current?.Dispatcher.Invoke(() =>
+                    Application.Current?.Dispatcher.InvokeAsync(() => // Gebruik InvokeAsync hier ook
                     {
-                        RootNodes?.Clear();
+                        lock(_rootNodesLock) { RootNodes?.Clear(); }
                         SelectedNodeAttributes?.Clear();
                         SelectedNodeReferences?.Clear();
-                        ActivePlotTabs?.Clear();
+                        ServerSearchResults?.Clear();
+                        ActivePlotTabs?.Clear(); // PlotTabs zullen hun eigen Dispose aanroepen
                     });
                 }
                 _disposedValue = true;
@@ -1463,3 +1637,4 @@ namespace Data_Logger.ViewModels
         #endregion
     }
 }
+

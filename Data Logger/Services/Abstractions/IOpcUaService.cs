@@ -8,6 +8,14 @@ using Opc.Ua;
 
 namespace Data_Logger.Services.Abstractions
 {
+    public class NodeSearchResult
+    {
+        public NodeId NodeId { get; set; }
+        public string DisplayName { get; set; }
+        public NodeClass NodeClass { get; set; }
+        public string Path { get; set; }
+    }
+    
     public interface IOpcUaService : IDisposable
     {
         bool IsConnected { get; }
@@ -53,5 +61,7 @@ namespace Data_Logger.Services.Abstractions
         Task<LocalizedText> ReadNodeDisplayNameAsync(NodeId nodeId);
         
         NodeId ParseNodeId(string nodeIdString);
+        
+        Task<List<NodeSearchResult>> SearchNodesRecursiveAsync(NodeId startNodeId, string regexPattern, bool caseSensitive, int maxDepth = 5, CancellationToken ct = default);
     }
 }

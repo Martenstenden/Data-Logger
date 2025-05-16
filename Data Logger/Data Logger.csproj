@@ -185,8 +185,10 @@
         <Compile Include="Converters\BooleanToConnectionStatusConverter.cs" />
         <Compile Include="Converters\BooleanToForwardBackwardConverter.cs" />
         <Compile Include="Converters\CountToEnabledConverter.cs" />
+        <Compile Include="Converters\CountToVisibilityConverter.cs" />
         <Compile Include="Converters\InverseBooleanConverter.cs" />
         <Compile Include="Converters\ModbusDataConverter.cs" />
+        <Compile Include="Converters\NullToBooleanConverter.cs" />
         <Compile Include="Converters\StringNotEmptyToBooleanConverter.cs" />
         <Compile Include="Core\ObservableObject.cs" />
         <Compile Include="Core\RelayCommand.cs" />
@@ -202,6 +204,7 @@
         <Compile Include="Models\ModbusTagConfig.cs" />
         <Compile Include="Models\ModbusTcpConnectionConfig.cs" />
         <Compile Include="Models\OpcUaConnectionConfig.cs" />
+        <Compile Include="Models\OpcUaDataTypeValues.cs" />
         <Compile Include="Models\OpcUaTagConfig.cs" />
         <Compile Include="Models\PlotDataPoint.cs" />
         <Compile Include="Models\TagBaselineState.cs" />

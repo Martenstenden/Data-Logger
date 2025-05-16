@@ -82,7 +82,25 @@ namespace Data_Logger.ViewModels
             _logger = logger?.ForContext<PlotTabViewModel>().ForContext("PlotHeader", header);
 
             PlottedSeriesInfos = new ObservableCollection<PlottedSeriesDisplayInfo>();
-            PlotModel = new PlotModel { Title = header, TitlePadding = 5, IsLegendVisible = true };
+            PlotModel = new PlotModel
+            {
+                TitlePadding = 0,   
+                Padding = new OxyThickness(0),
+                PlotAreaBorderThickness = new OxyThickness(1),
+                PlotMargins = new OxyThickness(45, 10, 10, 30),
+                IsLegendVisible = true
+            };
+            
+            PlotModel.Legends.Add(new Legend
+            {
+                LegendPlacement = LegendPlacement.Inside,
+                LegendPosition = LegendPosition.TopRight,
+                LegendOrientation = LegendOrientation.Vertical,
+                LegendBorderThickness = 0,
+                LegendPadding = 5,
+                LegendMargin = 0,
+                LegendFontSize = 10
+            });
             SetupAxes();
 
             
@@ -110,13 +128,15 @@ namespace Data_Logger.ViewModels
             var timeAxis = new DateTimeAxis
             {
                 Position = AxisPosition.Bottom,
-                StringFormat = "HH:mm:ss.fff",
+                StringFormat = "HH:mm:ss",
                 Title = "Tijd",
                 MajorGridlineStyle = LineStyle.Solid,
                 MinorGridlineStyle = LineStyle.Dot,
                 TimeZone = TimeZoneInfo.Local, 
-                MajorStep = double.NaN, 
-                MinorStep = double.NaN
+                AxisTickToLabelDistance = 2, 
+                AxisTitleDistance = 5,       
+                MinorTickSize = 2,
+                MajorTickSize = 4,
             };
             PlotModel.Axes.Add(timeAxis);
 
@@ -131,7 +151,11 @@ namespace Data_Logger.ViewModels
                 AbsoluteMinimum = double.NaN, 
                 AbsoluteMaximum = double.NaN,
                 IsZoomEnabled = true,
-                IsPanEnabled = true
+                IsPanEnabled = true,
+                AxisTickToLabelDistance = 2,
+                AxisTitleDistance = 5,
+                MinorTickSize = 2,
+                MajorTickSize = 4,
             };
             PlotModel.Axes.Add(valueAxis);
 

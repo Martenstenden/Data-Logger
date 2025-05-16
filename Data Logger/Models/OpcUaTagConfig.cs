@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Data_Logger.Core;
 using Data_Logger.Enums;
 using Newtonsoft.Json;
@@ -15,6 +16,9 @@ namespace Data_Logger.Models
             set => SetProperty(ref _tagName, value);
         }
 
+        public static IEnumerable<OpcUaDataType> Instance =>
+            Enum.GetValues(typeof(OpcUaDataType)).Cast<OpcUaDataType>();
+        
         private string _nodeId = "ns=2;s=MyVariable";
         public string NodeId
         {

@@ -495,36 +495,36 @@ namespace Data_Logger.Enums;
 
 public enum TagAlarmState
 {
-    /// <summary>
-    /// De tag bevindt zich binnen de normale operationele grenzen.
-    /// </summary>
+    
+    
+    
     Normal,
 
-    /// <summary>
-    /// De tagwaarde heeft de hoge alarmgrens overschreden.
-    /// </summary>
+    
+    
+    
     High,
 
-    /// <summary>
-    /// De tagwaarde heeft de zeer hoge alarmgrens overschreden.
-    /// </summary>
+    
+    
+    
     HighHigh,
 
-    /// <summary>
-    /// De tagwaarde is onder de lage alarmgrens gekomen.
-    /// </summary>
+    
+    
+    
     Low,
 
-    /// <summary>
-    /// De tagwaarde is onder de zeer lage alarmgrens gekomen.
-    /// </summary>
+    
+    
+    
     LowLow,
     
     Outlier,
 
-    /// <summary>
-    /// Er is een fout opgetreden bij het lezen van de tag of het bepalen van de alarmstatus.
-    /// </summary>
+    
+    
+    
     Error 
 }
 
@@ -1169,9 +1169,9 @@ namespace Data_Logger.Models
         [JsonIgnore]
         public double BaselineStandardDeviation { get; set; } = 0;
 
-        /// <summary>
-        /// Resets de baseline data en status. Aanroepen wanneer monitoring start of instellingen wijzigen.
-        /// </summary>
+        
+        
+        
         public void ResetBaselineState()
         {
             BaselineDataPoints.Clear(); // Als je deze lijst nog ergens voor gebruikt
@@ -1371,16 +1371,16 @@ using Data_Logger.Models;
 
 namespace Data_Logger.Services.Abstractions
 {
-    /// <summary>
-    /// Definieert het contract voor een service die verantwoordelijk is voor het persisteren van tag data.
-    /// </summary>
+    
+    
+    
     public interface IDataLoggingService
     {
-        /// <summary>
-        /// Logt een verzameling van tagwaarden naar een persistent medium.
-        /// </summary>
-        /// <param name="connectionName">De naam van de connectie waartoe de tagwaarden behoren. Wordt vaak gebruikt als onderdeel van de bestandsnaam of log-identifier.</param>
-        /// <param name="tagValues">Een opsomming van <see cref="LoggedTagValue"/> objecten die de te loggen data bevatten.</param>
+        
+        
+        
+        
+        
         void LogTagValues(string connectionName, IEnumerable<LoggedTagValue> tagValues);
     }
 }
@@ -1394,32 +1394,32 @@ using Data_Logger.Models;
 
 namespace Data_Logger.Services.Abstractions
 {
-    /// <summary>
-    /// Definieert een contract voor een service die logboekvermeldingen host en toegankelijk maakt voor de gebruikersinterface.
-    /// </summary>
+    
+    
+    
     public interface ILoggingHostService
     {
-        /// <summary>
-        /// Haalt een unieke identifier op voor deze instantie van de logging host service.
-        /// Nuttig voor diagnostische doeleinden.
-        /// </summary>
+        
+        
+        
+        
         string InstanceId { get; }
 
-        /// <summary>
-        /// Haalt de collectie van UI logboekvermeldingen op. Deze collectie kan worden gebonden aan de UI.
-        /// </summary>
+        
+        
+        
         ObservableCollection<UiLogEntry> LogEntries { get; }
 
-        /// <summary>
-        /// Voegt een nieuwe logboekvermelding toe aan de collectie.
-        /// Implementaties dienen ervoor te zorgen dat dit thread-safe gebeurt, indien nodig (bijvoorbeeld door naar de UI-thread te dispatcheren).
-        /// </summary>
-        /// <param name="entry">De <see cref="UiLogEntry"/> om toe te voegen.</param>
+        
+        
+        
+        
+        
         void AddLogEntry(UiLogEntry entry);
 
-        /// <summary>
-        /// Wist alle huidige logboekvermeldingen uit de collectie.
-        /// </summary>
+        
+        
+        
         void ClearLogs();
     }
 }
@@ -1442,50 +1442,50 @@ namespace Data_Logger.Services.Abstractions
         public DateTime Timestamp { get; set; }
     }
 
-    /// <summary>
-    /// Definieert het contract voor een service die Modbus TCP communicatie afhandelt.
-    /// </summary>
+    
+    
+    
     public interface IModbusService : IDisposable
     {
-        /// <summary>
-        /// Geeft aan of de service momenteel verbonden is met een Modbus server.
-        /// </summary>
+        
+        
+        
         bool IsConnected { get; }
 
-        /// <summary>
-        /// Event dat wordt getriggerd wanneer de verbindingsstatus met de Modbus server verandert.
-        /// </summary>
+        
+        
+        
         event EventHandler ConnectionStatusChanged;
 
-        /// <summary>
-        /// Event dat wordt getriggerd wanneer er nieuwe data van geconfigureerde tags is ontvangen.
-        /// </summary>
+        
+        
+        
         event EventHandler<IEnumerable<LoggedTagValue>> TagsDataReceived; // Aangenomen dat LoggedTagValue hier past.
 
-        /// <summary>
-        /// Probeert asynchroon een verbinding te maken met de Modbus server op basis van de huidige configuratie.
-        /// </summary>
-        /// <returns>Een Task die resulteert in <c>true</c> als de verbinding succesvol is; anders <c>false</c>.</returns>
+        
+        
+        
+        
         Task<bool> ConnectAsync();
 
-        /// <summary>
-        /// Verbreekt asynchroon de huidige verbinding met de Modbus server.
-        /// </summary>
-        /// <returns>Een Task die de verbreekoperatie representeert.</returns>
+        
+        
+        
+        
         Task DisconnectAsync();
 
-        /// <summary>
-        /// Pollt asynchroon de waarden van alle geconfigureerde en actieve tags.
-        /// De ontvangen data wordt via het <see cref="TagsDataReceived"/> event beschikbaar gesteld.
-        /// </summary>
-        /// <returns>Een Task die de poll-operatie representeert.</returns>
+        
+        
+        
+        
+        
         Task PollConfiguredTagsAsync();
 
-        /// <summary>
-        /// Herconfigureert de Modbus service met nieuwe instellingen.
-        /// Als de service verbonden is, kunnen wijzigingen in verbindingsparameters leiden tot een herstart van de verbinding.
-        /// </summary>
-        /// <param name="newConfig">De nieuwe <see cref="ModbusTcpConnectionConfig"/> om toe te passen.</param>
+        
+        
+        
+        
+        
         void Reconfigure(ModbusTcpConnectionConfig newConfig);
     }
 }
@@ -1506,73 +1506,73 @@ namespace Data_Logger.Services.Abstractions
 {
     public interface IOpcUaService : IDisposable
     {
-        /// <summary>
-        /// Geeft aan of er een actieve verbinding is met de OPC UA server.
-        /// </summary>
+        
+        
+        
         bool IsConnected { get; }
 
-        /// <summary>
-        /// De namespace tabel van de huidige actieve sessie.
-        /// Is null als er geen actieve sessie is.
-        /// </summary>
+        
+        
+        
+        
         NamespaceTable NamespaceUris { get; }
 
-        /// <summary>
-        /// Event dat wordt getriggerd wanneer de connectiestatus verandert.
-        /// </summary>
+        
+        
+        
         event EventHandler ConnectionStatusChanged;
 
-        /// <summary>
-        /// Event dat wordt getriggerd wanneer er nieuwe data van gemonitorde tags binnenkomt.
-        /// </summary>
+        
+        
+        
         event EventHandler<IEnumerable<LoggedTagValue>> TagsDataReceived;
 
-        /// <summary>
-        /// Maakt asynchroon verbinding met de OPC UA server op basis van de huidige configuratie.
-        /// </summary>
-        /// <returns>True als de verbinding succesvol is, anders false.</returns>
+        
+        
+        
+        
         Task<bool> ConnectAsync();
 
-        /// <summary>
-        /// Verbreekt asynchroon de verbinding met de OPC UA server.
-        /// </summary>
+        
+        
+        
         Task DisconnectAsync();
 
-        /// <summary>
-        /// Herconfigureert de service met nieuwe verbindings- en tag-instellingen.
-        /// Als de service verbonden is en de endpoint details veranderen, wordt de verbinding herstart.
-        /// Als alleen tags of monitoring parameters veranderen, wordt de subscription bijgewerkt.
-        /// </summary>
-        /// <param name="newConfig">De nieuwe OPC UA verbindingsconfiguratie.</param>
+        
+        
+        
+        
+        
+        
         void Reconfigure(OpcUaConnectionConfig newConfig);
 
-        /// <summary>
-        /// Start asynchroon het monitoren van de tags die geconfigureerd zijn in OpcUaConfig.TagsToMonitor
-        /// en waarvoor IsActive true is. Vereist een actieve sessie.
-        /// </summary>
+        
+        
+        
+        
         Task StartMonitoringTagsAsync();
 
-        /// <summary>
-        /// Stopt asynchroon het monitoren van tags en verwijdert de OPC UA subscription.
-        /// </summary>
+        
+        
+        
         Task StopMonitoringTagsAsync();
 
-        /// <summary>
-        /// Leest asynchroon de huidige waarden van alle actief geconfigureerde tags.
-        /// </summary>
-        /// <returns>Een collectie van LoggedTagValue objecten met de gelezen waarden.</returns>
+        
+        
+        
+        
         Task<IEnumerable<LoggedTagValue>> ReadCurrentTagValuesAsync();
 
-        /// <summary>
-        /// Browset asynchroon de children van een gegeven NodeId.
-        /// </summary>
-        /// <param name="nodeIdToBrowse">De NodeId waarvan de children gebrowset moeten worden.</param>
-        /// <param name="referenceTypeId">Optioneel: Het type referentie om te volgen (default: HierarchicalReferences).</param>
-        /// <param name="includeSubtypes">Optioneel: Of subtypes van de referenceTypeId meegenomen moeten worden (default: true).</param>
-        /// <param name="direction">Optioneel: De browse richting (default: Forward).</param>
-        /// <param name="nodeClassMask">Optioneel: Filter op NodeClass van de target nodes (default: Unspecified).</param>
-        /// <param name="ct">Optioneel: CancellationToken.</param>
-        /// <returns>Een collectie van ReferenceDescription objecten die de gevonden referenties representeren.</returns>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         Task<ReferenceDescriptionCollection> BrowseAsync(
             NodeId nodeIdToBrowse,
             NodeId referenceTypeId = null,
@@ -1582,41 +1582,41 @@ namespace Data_Logger.Services.Abstractions
             CancellationToken ct = default
         );
 
-        /// <summary>
-        /// Browset asynchroon de "root" van de OPC UA server (meestal de ObjectsFolder).
-        /// </summary>
-        /// <returns>Een collectie van ReferenceDescription objecten.</returns>
+        
+        
+        
+        
         Task<ReferenceDescriptionCollection> BrowseRootAsync();
 
-        /// <summary>
-        /// Leest asynchroon de waarde van een enkele NodeId.
-        /// </summary>
-        /// <param name="nodeId">De NodeId waarvan de waarde gelezen moet worden.</param>
-        /// <returns>Een DataValue object met de waarde, status en timestamps.</returns>
+        
+        
+        
+        
+        
         Task<DataValue> ReadValueAsync(NodeId nodeId);
 
-        /// <summary>
-        /// Leest asynchroon een lijst van standaard attributen voor een gegeven NodeId.
-        /// </summary>
-        /// <param name="nodeId">De NodeId waarvan de attributen gelezen moeten worden.</param>
-        /// <returns>Een lijst van NodeAttributeViewModel objecten.</returns>
+        
+        
+        
+        
+        
         Task<List<NodeAttributeViewModel>> ReadNodeAttributesAsync(NodeId nodeId);
         
         Task<ReferenceDescriptionCollection> BrowseAllReferencesAsync(NodeId nodeIdToBrowse, BrowseDirection direction = BrowseDirection.Both);
 
-        /// <summary>
-        /// Leest asynchroon de DisplayName van een gegeven NodeId.
-        /// </summary>
-        /// <param name="nodeId">De NodeId waarvan de DisplayName gelezen moet worden.</param>
-        /// <returns>Een LocalizedText object met de DisplayName, of null bij een fout.</returns>
+        
+        
+        
+        
+        
         Task<LocalizedText> ReadNodeDisplayNameAsync(NodeId nodeId);
         
-        /// <summary>
-        /// Parset een NodeId string naar een Opc.Ua.NodeId object, gebruikmakend van de huidige sessiecontext.
-        /// </summary>
-        /// <param name="nodeIdString">De NodeId string om te parsen.</param>
-        /// <returns>Een Opc.Ua.NodeId object.</returns>
-        /// <exception cref="ServiceResultException">Als de string ongeldig is of parsen mislukt.</exception>
+        
+        
+        
+        
+        
+        
         NodeId ParseNodeId(string nodeIdString);
     }
 }
@@ -1628,32 +1628,32 @@ using Data_Logger.Models;
 
 namespace Data_Logger.Services.Abstractions
 {
-    /// <summary>
-    /// Definieert het contract voor een service die verantwoordelijk is voor het laden en opslaan van applicatie-instellingen.
-    /// </summary>
+    
+    
+    
     public interface ISettingsService
     {
-        /// <summary>
-        /// Haalt de momenteel geladen applicatie-instellingen op.
-        /// Wijzigingen hierin worden pas persistent na een aanroep naar <see cref="SaveSettings"/>.
-        /// </summary>
+        
+        
+        
+        
         AppSettings CurrentSettings { get; }
 
-        /// <summary>
-        /// Laadt de applicatie-instellingen van een persistent medium (bijvoorbeeld een configuratiebestand).
-        /// Als er geen instellingen worden gevonden, kunnen standaardinstellingen worden geladen.
-        /// </summary>
+        
+        
+        
+        
         void LoadSettings();
 
-        /// <summary>
-        /// Slaat de huidige <see cref="CurrentSettings"/> op naar een persistent medium.
-        /// </summary>
+        
+        
+        
         void SaveSettings();
 
-        /// <summary>
-        /// Laadt een set standaardinstellingen in <see cref="CurrentSettings"/>.
-        /// Dit wordt typisch aangeroepen als er geen bestaande instellingen kunnen worden geladen.
-        /// </summary>
+        
+        
+        
+        
         void LoadDefaultSettings();
     }
 }
@@ -1666,26 +1666,26 @@ using Data_Logger.Enums;
 
 namespace Data_Logger.Services.Abstractions
 {
-    /// <summary>
-    /// Definieert een contract voor een service die de applicatiestatus beheert en rapporteert.
-    /// </summary>
+    
+    
+    
     public interface IStatusService
     {
-        /// <summary>
-        /// Haalt de huidige status van de applicatie op.
-        /// </summary>
+        
+        
+        
         ApplicationStatus CurrentStatus { get; }
 
-        /// <summary>
-        /// Haalt het bericht op dat de huidige status beschrijft.
-        /// </summary>
+        
+        
+        
         string StatusMessage { get; }
 
-        /// <summary>
-        /// Stelt de huidige applicatiestatus en het bijbehorende bericht in.
-        /// </summary>
-        /// <param name="status">De nieuwe <see cref="ApplicationStatus"/> om in te stellen.</param>
-        /// <param name="message">Het bericht dat de nieuwe status beschrijft.</param>
+        
+        
+        
+        
+        
         void SetStatus(ApplicationStatus status, string message);
     }
 }
@@ -4130,10 +4130,10 @@ namespace Data_Logger.ViewModels
             );
         }
 
-        /// <summary>
-        /// Voegt een enkel, nieuw berekend gemiddelde punt toe aan de historie en update de display.
-        /// Wordt aangeroepen vanuit de ViewModel wanneer een nieuw gemiddelde is berekend (bijv. bij elk nieuw datapunt).
-        /// </summary>
+        
+        
+        
+        
         public void AddMeanDataPoint(DateTime timestamp, double meanValue)
         {
             System.Windows.Application.Current.Dispatcher.Invoke(
@@ -4150,12 +4150,12 @@ namespace Data_Logger.ViewModels
             );
         }
 
-        /// <summary>
-        /// Herberekent de volledige gemiddelde-lijn op basis van alle bestaande datapunten (_allDataPoints)
-        /// en de (mogelijk gewijzigde) baseline/outlier-configuratie van de tag.
-        /// Deze methode moet worden aangeroepen nadat de outlier-instellingen van de tagConfig zijn gewijzigd
-        /// en de baseline state van de tagConfig is gereset door de caller.
-        /// </summary>
+        
+        
+        
+        
+        
+        
         public void RebuildMeanLineSeriesFromAllData(OpcUaTagConfig tagConfig)
         {
             if (tagConfig == null)

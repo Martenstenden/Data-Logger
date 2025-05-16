@@ -24,7 +24,7 @@
 #----------------------------------------------------
 
 # Stel hier de volledige map in waar de code staat die je wilt verzamelen.
-$sourceFolder = "C:\Users\marten-desktop\Documents\Data-Logger" # Voorbeeld: "C:\Users\JouwNaam\Documents\MijnCSharpProject"
+$sourceFolder = "C:\Development\Projects\Afstudeeropdracht - Github\Data-Logger" # Voorbeeld: "C:\Users\JouwNaam\Documents\MijnCSharpProject"
 
 # Stel hier het RELATIEVE pad en de bestandsnaam in voor het outputbestand (t.o.v. $sourceFolder).
 # Je kunt ook een volledig pad opgeven, bijv.: "C:\VerzameldeCode\ProjectCode.txt"
@@ -39,7 +39,9 @@ $excludeDirPatterns = @(
     '\.idea\'
     '\.vs\'   # Voorbeeld extra patroon
     '\.git\'  # Vaak ook gewenst om uit te sluiten
+    '\.github\'
     '\output\'
+    '\Properties\'
 )
 
 # Definieer hier de BESTANDSEXTENSIES (incl. punt) die WEL meegenomen moeten worden.

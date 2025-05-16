@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
@@ -21,6 +22,7 @@ namespace Data_Logger.ViewModels
 
         private string _filterText;
         private LogEventLevel? _selectedLogLevelFilter;
+        private bool _useRegexFilter;
 
         public ObservableCollection<UiLogEntry> LogEntries => _loggingHostService.LogEntries;
         public ICollectionView FilteredLogEntries { get; }
@@ -49,6 +51,16 @@ namespace Data_Logger.ViewModels
             {
                 if (SetProperty(ref _selectedLogLevelFilter, value))
                     FilteredLogEntries.Refresh();
+            }
+        }
+        
+        public bool UseRegexFilter
+        {
+            get => _useRegexFilter;
+            set
+            {
+                if (SetProperty(ref _useRegexFilter, value))
+                    FilteredLogEntries.Refresh(); 
             }
         }
 
@@ -83,17 +95,41 @@ namespace Data_Logger.ViewModels
                 bool logLevelMatch =
                     !_selectedLogLevelFilter.HasValue
                     || entry.Level >= _selectedLogLevelFilter.Value;
-                bool textMatch =
-                    string.IsNullOrWhiteSpace(_filterText)
-                    || entry.RenderedMessage.IndexOf(
-                        _filterText,
-                        StringComparison.OrdinalIgnoreCase
-                    ) >= 0
-                    || (
-                        entry.Exception != null
-                        && entry.Exception.IndexOf(_filterText, StringComparison.OrdinalIgnoreCase)
-                            >= 0
-                    );
+                
+                bool textMatch = true; 
+                if (!string.IsNullOrWhiteSpace(_filterText))
+                {
+                    if (UseRegexFilter) 
+                    {
+                        try
+                        {
+                            
+                            textMatch = Regex.IsMatch(entry.RenderedMessage, _filterText, RegexOptions.IgnoreCase) ||
+                                        (entry.Exception != null && Regex.IsMatch(entry.Exception, _filterText, RegexOptions.IgnoreCase));
+                        }
+                        catch (ArgumentException ex) 
+                        {
+                            _logger.Debug(ex, "Ongeldige reguliere expressie ingevoerd: {RegexPattern}", _filterText);
+                            
+                            
+                            textMatch = false;
+                        }
+                    }
+                    else
+                    {
+                        
+                        textMatch =
+                            entry.RenderedMessage.IndexOf(
+                                _filterText,
+                                StringComparison.OrdinalIgnoreCase
+                            ) >= 0
+                            || (
+                                entry.Exception != null
+                                && entry.Exception.IndexOf(_filterText, StringComparison.OrdinalIgnoreCase)
+                                >= 0
+                            );
+                    }
+                }
                 return logLevelMatch && textMatch;
             }
             return false;
