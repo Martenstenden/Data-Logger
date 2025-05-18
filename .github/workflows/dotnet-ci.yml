@@ -14,6 +14,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.config') }}-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v2
       with:
@@ -27,9 +35,31 @@ jobs:
       with:
         msbuild-architecture: x86 # Of x64, afhankelijk van je project
 
-    - name: Build solution
-      run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
+    - name: Code Formatting Check (dotnet format)
+      run: |
+        dotnet tool install --global dotnet-format --version 8.*
+        dotnet format "Data Logger/Data Logger.sln" --verify-no-changes --verbosity diagnostic
 
+    - name: Build solution (with Roslyn Analyzer errors)
+      run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU" /p:TreatWarningsAsErrors=true
+
+    - name: Install Coverlet
+      run: dotnet tool install --global coverlet.console
+
+    - name: Run Unit Tests with Coverage
+      shell: pwsh
+      run: |
+        $testAssembly = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" # Controleer dit pad!
+        $testTargetArgs = "\`"$testAssembly\`" /TestCaseFilter:\"Category!=IntegrationTest\" /Logger:trx /ResultsDirectory:\"UnitTestResults\""
+        coverlet $testAssembly --target "vstest.console.exe" --targetargs $testTargetArgs --format "cobertura" --output "coverage/cobertura.xml" --exclude-by-attribute "GeneratedCodeAttribute" --exclude "[Data?Logger.Views?]*.xaml.cs" "[Data?Logger?]*.AssemblyInfo.cs" "[Data?Logger?]*.Designer.cs"
+
+    - name: Upload Unit Test Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: unit-test-results
+        path: UnitTestResults/**/*.trx
+        
     - name: Setup VSTest
       uses: darenm/Setup-VSTest@v1.2
 
@@ -46,20 +76,61 @@ jobs:
         name: unit-test-results
         path: UnitTestResults/**/*.trx
 
-    # --- Integratietest stappen zijn hier verwijderd ---
-    # - name: Run Integration Tests ...
-    # - name: Upload Integration Test Results ...
-    # - name: Check Integration Test Outcome ...
-
-    - name: Upload Build Artifact (Data Logger Application)
+    - name: Upload Coverage Report
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: data-logger-application
-        path: |
-          Data Logger/Data Logger/bin/Release/**/*.exe
-          Data Logger/Data Logger/bin/Release/**/*.dll
-          Data Logger/Data Logger/bin/Release/**/*.config
-          # Voeg hier andere bestanden toe die je nodig hebt voor je artefact
-          # Data Logger/Data Logger/bin/Release/Logs
-          # Data Logger/Data Logger/bin/Release/LoggedData
-          # Data Logger/Data Logger/bin/Release/CertificateStores
+        name: code-coverage-report
+        path: coverage/cobertura.xml
+
+    - name: Create Portable Package Directory
+      run: mkdir ./portable-package
+
+    - name: Copy Build Artifacts to Portable Package Directory
+      shell: pwsh
+      run: |
+        $releaseDir = "Data Logger/Data Logger/bin/Release"
+        Copy-Item -Path "$releaseDir/*.exe" -Destination "./portable-package" -ErrorAction SilentlyContinue
+        Copy-Item -Path "$releaseDir/*.dll" -Destination "./portable-package" -ErrorAction SilentlyContinue
+        Copy-Item -Path "$releaseDir/*.config" -Destination "./portable-package" -ErrorAction SilentlyContinue
+        # Voeg hier andere bestanden of mappen toe die nodig zijn voor je portable app
+        if (Test-Path "$releaseDir/Logs") { Copy-Item -Path "$releaseDir/Logs" -Destination "./portable-package" -Recurse -Force -ErrorAction SilentlyContinue }
+        if (Test-Path "$releaseDir/LoggedData") { Copy-Item -Path "$releaseDir/LoggedData" -Destination "./portable-package" -Recurse -Force -ErrorAction SilentlyContinue }
+        if (Test-Path "$releaseDir/CertificateStores") { Copy-Item -Path "$releaseDir/CertificateStores" -Destination "./portable-package" -Recurse -Force -ErrorAction SilentlyContinue }
+
+    - name: Zip Portable Package
+      shell: pwsh
+      run: Compress-Archive -Path ./portable-package/* -DestinationPath ./data-logger-portable.zip -ErrorAction Stop
+
+    - name: Upload Portable Package Artifact (voor interne inspectie/andere jobs)
+      uses: actions/upload-artifact@v4
+      with:
+        name: data-logger-portable-zip
+        path: ./data-logger-portable.zip
+
+    # Deployment: Maak een GitHub Release en upload het ZIP-bestand
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/v') # Alleen uitvoeren voor tags (bijv. v1.0.0)
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Data Logger ${{ github.ref_name }}
+        body: |
+          Data Logger Release ${{ github.ref_name }}
+          Portable application package.
+        draft: false
+        prerelease: contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc')
+
+    - name: Upload Release Asset (Portable ZIP)
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./data-logger-portable.zip
+        asset_name: data-logger-${{ github.ref_name }}.zip
+        asset_content_type: application/zip
