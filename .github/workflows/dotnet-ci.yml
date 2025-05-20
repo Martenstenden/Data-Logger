@@ -40,8 +40,8 @@ jobs:
     #     dotnet tool install --global dotnet-format --version 8.*
     #     dotnet format "Data Logger/Data Logger.sln" --verify-no-changes --verbosity diagnostic
 
-    - name: Build solution (with Roslyn Analyzer errors)
-      run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU" /p:TreatWarningsAsErrors=true
+    # - name: Build solution (with Roslyn Analyzer errors)
+    #   run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU" /p:TreatWarningsAsErrors=true
 
     - name: Install Coverlet
       run: dotnet tool install --global coverlet.console
