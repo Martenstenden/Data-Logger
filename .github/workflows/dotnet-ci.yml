@@ -31,35 +31,68 @@ jobs:
       run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
 
     - name: Setup VSTest
-      uses: darenm/Setup-VSTest@v1.2
+      uses: darenm/Setup-VSTest@v1.2 # Je had deze stap, dus ik laat hem staan.
 
     - name: Run Unit Tests (excluding IntegrationTests)
-      run: vstest.console.exe "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" /TestCaseFilter:"Category!=IntegrationTest" /Logger:trx /ResultsDirectory:"UnitTestResults"
+      run: vstest.console.exe "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" /TestCaseFilter:"Category!=IntegrationTest" /Logger:trx /ResultsDirectory:"TestResults/UnitTests"
       # Deze stap faalt de workflow als unit tests falen.
-      # Zorg ervoor dat je unit tests de categorie "IntegrationTest" NIET hebben,
-      # of een andere categorie hebben zoals "Unit" en je filtert daarop.
 
     - name: Upload Unit Test Results
       if: always() # Upload altijd, ook als tests falen, voor analyse
       uses: actions/upload-artifact@v4
       with:
         name: unit-test-results
-        path: UnitTestResults/**/*.trx
+        path: TestResults/UnitTests/**/*.trx
 
-    # --- Integratietest stappen zijn hier verwijderd ---
-    # - name: Run Integration Tests ...
-    # - name: Upload Integration Test Results ...
-    # - name: Check Integration Test Outcome ...
+    - name: Run Integration Tests
+      run: vstest.console.exe "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" /TestCaseFilter:"Category=IntegrationTest" /Logger:trx /ResultsDirectory:"TestResults/IntegrationTests"
+      # Voeg hier eventueel 'continue-on-error: true' toe als je wilt dat de pipeline doorgaat
+      # met packagen, zelfs als integratietests falen.
+      # bijv. continue-on-error: ${{ github.ref == 'refs/heads/develop' }} # Alleen doorgaan op develop branch
 
-    - name: Upload Build Artifact (Data Logger Application)
+    - name: Upload Integration Test Results
+      if: always() # Upload altijd, ook als tests falen, voor analyse
       uses: actions/upload-artifact@v4
       with:
-        name: data-logger-application
-        path: |
-          Data Logger/Data Logger/bin/Release/**/*.exe
-          Data Logger/Data Logger/bin/Release/**/*.dll
-          Data Logger/Data Logger/bin/Release/**/*.config
-          # Voeg hier andere bestanden toe die je nodig hebt voor je artefact
-          # Data Logger/Data Logger/bin/Release/Logs
-          # Data Logger/Data Logger/bin/Release/LoggedData
-          # Data Logger/Data Logger/bin/Release/CertificateStores
+        name: integration-test-results
+        path: TestResults/IntegrationTests/**/*.trx
+
+    - name: Create Portable Package Directory
+      run: mkdir ./portable-package
+
+    - name: Copy Build Artifacts to Portable Package Directory
+      shell: pwsh
+      run: |
+        $releaseDir = "Data Logger/Data Logger/bin/Release"
+        if (-not (Test-Path $releaseDir)) {
+          Write-Error "Fout: Release directory '$releaseDir' niet gevonden. De build is mogelijk mislukt of het output pad is incorrect."
+          exit 1
+        }
+        Write-Host "Kopiëren van bestanden uit '$releaseDir' naar './portable-package'"
+        Copy-Item -Path "$releaseDir/*.exe" -Destination "./portable-package" -ErrorAction Stop
+        Copy-Item -Path "$releaseDir/*.dll" -Destination "./portable-package" -ErrorAction Stop
+        Copy-Item -Path "$releaseDir/*.config" -Destination "./portable-package" -ErrorAction Stop
+        # Voeg hier andere bestanden of mappen toe die nodig zijn voor je portable app:
+        if (Test-Path "$releaseDir/Logs") {
+          Write-Host "Kopiëren van Logs map..."
+          Copy-Item -Path "$releaseDir/Logs" -Destination "./portable-package" -Recurse -Force -ErrorAction SilentlyContinue # Fout hier is misschien minder kritiek
+        }
+        if (Test-Path "$releaseDir/LoggedData") {
+          Write-Host "Kopiëren van LoggedData map..."
+          Copy-Item -Path "$releaseDir/LoggedData" -Destination "./portable-package" -Recurse -Force -ErrorAction SilentlyContinue # Fout hier is misschien minder kritiek
+        }
+        if (Test-Path "$releaseDir/CertificateStores") {
+          Write-Host "Kopiëren van CertificateStores map..."
+          Copy-Item -Path "$releaseDir/CertificateStores" -Destination "./portable-package" -Recurse -Force -ErrorAction SilentlyContinue # Fout hier is misschien minder kritiek
+        }
+        Write-Host "Bestanden succesvol gekopieerd naar ./portable-package"
+
+    - name: Zip Portable Package
+      shell: pwsh
+      run: Compress-Archive -Path ./portable-package/* -DestinationPath ./data-logger-portable.zip -Force -ErrorAction Stop
+
+    - name: Upload Portable Package Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: data-logger-portable-zip # Naam van het artefact dat de zip bevat
+        path: ./data-logger-portable.zip # Pad naar het te uploaden zip-bestand
