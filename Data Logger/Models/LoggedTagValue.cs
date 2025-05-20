@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Data_Logger.Core;
 using Data_Logger.Enums;
 

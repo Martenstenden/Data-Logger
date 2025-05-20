@@ -1,7 +1,7 @@
-using System.Windows; 
-using System.Windows.Controls; 
-using Data_Logger.Models;    
-using Data_Logger.ViewModels; 
+using System.Windows;
+using System.Windows.Controls;
+using Data_Logger.Models;
+using Data_Logger.ViewModels;
 
 namespace Data_Logger.Views
 {

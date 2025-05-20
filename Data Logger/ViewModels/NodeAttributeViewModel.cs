@@ -1,4 +1,4 @@
-﻿using Data_Logger.Core;
+using Data_Logger.Core;
 using Opc.Ua;
 
 namespace Data_Logger.ViewModels

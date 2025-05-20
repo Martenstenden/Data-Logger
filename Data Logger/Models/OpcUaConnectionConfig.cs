@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using Data_Logger.Enums;
 using Opc.Ua;
 

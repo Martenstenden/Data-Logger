@@ -1,6 +1,6 @@
 using System;
 using System.Windows.Controls;
-using System.Windows.Threading; 
+using System.Windows.Threading;
 using Data_Logger.ViewModels;
 
 namespace Data_Logger.Views

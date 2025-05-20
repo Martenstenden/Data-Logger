@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -28,7 +28,7 @@ namespace DataLogger.Tests.IntegrationTests
         private const string DefaultLocalOpcUaEndpoint =
             "opc.tcp://localhost:62541/Quickstarts/ReferenceServer";
         private string _currentOpcUaEndpoint;
-        
+
         private ApplicationConfiguration _clientAppConfigForTest;
         private ILogger _testLogger;
 
@@ -47,7 +47,7 @@ namespace DataLogger.Tests.IntegrationTests
                 .WriteTo.Console()
                 // .WriteTo.File("logs/DataLogger_IntegrationTests_.txt", rollingInterval: RollingInterval.Day) // Optioneel: loggen naar een bestand
                 .CreateLogger();
-            
+
             if (_isCiEnvironment)
             {
                 TestContext.Progress.WriteLine(

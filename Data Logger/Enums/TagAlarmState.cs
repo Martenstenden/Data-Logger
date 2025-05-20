@@ -1,4 +1,4 @@
-﻿namespace Data_Logger.Enums // Puntkomma verwijderd
+namespace Data_Logger.Enums // Puntkomma verwijderd
 {
     /// <summary>
     /// Definieert de mogelijke alarmstatussen voor een gemonitorde tag.

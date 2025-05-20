@@ -1,4 +1,4 @@
-﻿using Data_Logger.Enums;
+using Data_Logger.Enums;
 using Data_Logger.Models;
 using Moq;
 using NUnit.Framework;

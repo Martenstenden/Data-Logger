@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using Data_Logger.Models;
 
 namespace Data_Logger.Services.Abstractions

@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Threading;
 using Data_Logger.Enums;
 using Data_Logger.Models;

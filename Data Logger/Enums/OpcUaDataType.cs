@@ -1,4 +1,4 @@
-﻿namespace Data_Logger.Enums
+namespace Data_Logger.Enums
 {
     /// <summary>
     /// Definieert een selectie van OPC UA datatypes die door de applicatie gebruikt kunnen worden

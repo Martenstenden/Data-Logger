@@ -1,4 +1,4 @@
-﻿using System.Windows; 
+using System.Windows;
 
 namespace Data_Logger.Views
 {
@@ -12,7 +12,7 @@ namespace Data_Logger.Views
         /// </summary>
         public MainWindow()
         {
-          
+
             InitializeComponent(); // Laadt de XAML en initialiseert componenten.
         }
 
