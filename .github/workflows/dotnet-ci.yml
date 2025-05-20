@@ -34,6 +34,13 @@ jobs:
     - name: Build solution
       run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
 
+    - name: List Build Output Structure
+      shell: pwsh
+      run: |
+        Get-ChildItem -Recurse -Path "./" | Select-Object FullName
+        Write-Host "--- Verwachte Release Directory Inhoud ---"
+        Get-ChildItem -Path "Data Logger/Data Logger/bin/Release" -ErrorAction SilentlyContinue
+
     - name: Setup VSTest
       uses: darenm/Setup-VSTest@v1.2 
 
@@ -53,7 +60,7 @@ jobs:
     - name: Copy Build Artifacts to Portable Package Directory
       shell: pwsh
       run: |
-        $releaseDir = "Data Logger/Data Logger/bin/Release"
+        $releaseDir = "Data Logger/bin/Release"
         if (-not (Test-Path $releaseDir)) {
           Write-Error "Fout: Release directory '$releaseDir' niet gevonden. De build is mogelijk mislukt of het output pad is incorrect."
           exit 1
