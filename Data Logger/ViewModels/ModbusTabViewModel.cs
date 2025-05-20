@@ -1017,7 +1017,6 @@ namespace Data_Logger.ViewModels
             {
                 return false;
             }
-            return false;
         }
         #endregion
 

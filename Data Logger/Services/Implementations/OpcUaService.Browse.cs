@@ -5,7 +5,7 @@ using Opc.Ua;
 
 namespace Data_Logger.Services.Implementations
 {
-    public sealed partial class OpcUaService
+    public partial class OpcUaService
     {
         /// <inheritdoc/>
         public async Task<ReferenceDescriptionCollection> BrowseAsync(

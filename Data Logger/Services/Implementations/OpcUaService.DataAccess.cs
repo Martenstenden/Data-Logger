@@ -13,7 +13,7 @@ namespace Data_Logger.Services.Implementations
     /// Partial class voor OpcUaService die methoden bevat voor data access operaties
     /// zoals het lezen van waarden en attributen.
     /// </summary>
-    public sealed partial class OpcUaService
+    public partial class OpcUaService
     {
         /// <inheritdoc/>
         public async Task<IEnumerable<LoggedTagValue>> ReadCurrentTagValuesAsync()

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -148,6 +148,7 @@ namespace DataLogger.Tests.IntegrationTests
         }
 
         [SetUp]
+        [Obsolete("Obsolete")]
         public void PerTestSetup()
         {
             TestContext.Progress.WriteLine(

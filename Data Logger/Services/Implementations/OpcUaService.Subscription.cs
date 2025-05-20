@@ -13,7 +13,7 @@ namespace Data_Logger.Services.Implementations
     /// <summary>
     /// Partial class voor OpcUaService die methoden bevat gerelateerd aan OPC UA subscriptions en data monitoring.
     /// </summary>
-    public sealed partial class OpcUaService
+    public partial class OpcUaService
     {
         /// <inheritdoc/>
         public async Task StartMonitoringTagsAsync()

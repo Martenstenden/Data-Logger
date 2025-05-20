@@ -21,7 +21,7 @@ namespace Data_Logger.ViewModels
     /// live data monitoring, alarmering, outlier detectie, en plotting.
     /// Implementeert <see cref="IDisposable"/> voor het correct vrijgeven van resources.
     /// </summary>
-    public sealed class OpcUaTabViewModel : TabViewModelBase, IDisposable
+    public class OpcUaTabViewModel : TabViewModelBase, IDisposable
     {
         #region Readonly Fields
         private readonly ILogger _specificLogger; // Logger specifiek voor deze ViewModel instantie
@@ -848,7 +848,7 @@ namespace Data_Logger.ViewModels
         /// <summary>
         /// Probeert de gegeven object waarde te converteren naar een double.
         /// </summary>
-        protected bool TryConvertToDouble(object value, out double result)
+        protected static bool TryConvertToDouble(object value, out double result)
         {
             result = 0;
             if (value == null)

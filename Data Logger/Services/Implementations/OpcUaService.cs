@@ -15,7 +15,7 @@ namespace Data_Logger.Services.Implementations
     /// Beheert sessies, subscriptions, browsen van de adresruimte en het lezen/schrijven van node-waarden.
     /// Implementeert <see cref="IOpcUaService"/> en <see cref="IDisposable"/>.
     /// </summary>
-    public sealed partial class OpcUaService : IOpcUaService
+    public partial class OpcUaService : IOpcUaService
     {
         #region Readonly Fields
         private readonly ApplicationConfiguration _appConfig; // OPC UA client applicatie configuratie

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Net;
 using System.Windows;
@@ -23,6 +23,7 @@ namespace Data_Logger
 
         private ApplicationConfiguration _opcUaAppConfig;
 
+        [Obsolete("Obsolete")]
         public App()
         {
             _theActualLoggingHostService = new LoggingHostService();

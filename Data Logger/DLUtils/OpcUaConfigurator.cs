@@ -47,6 +47,7 @@ namespace Data_Logger.DLUtils // Zorg dat de namespace overeenkomt met jouw proj
         /// <returns>Een geconfigureerd <see cref="ApplicationConfiguration"/> object.</returns>
         /// <exception cref="ArgumentNullException">Als <paramref name="applicationName"/>, <paramref name="applicationUriIdentifier"/>, of <paramref name="pkiBaseStorePath"/> null of leeg is.</exception>
         /// <exception cref="Exception">Kan exceptions gooien van de OPC UA SDK tijdens validatie of certificaatoperaties.</exception>
+        [Obsolete("Obsolete")]
         public static ApplicationConfiguration CreateClientConfiguration(
             string applicationName,
             string applicationUriIdentifier,

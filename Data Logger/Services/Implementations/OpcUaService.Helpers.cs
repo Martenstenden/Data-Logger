@@ -12,7 +12,7 @@ namespace Data_Logger.Services.Implementations
     /// <summary>
     /// Partial class voor OpcUaService die diverse private helper-methoden bevat.
     /// </summary>
-    public sealed partial class OpcUaService
+    public partial class OpcUaService
     {
         /// <summary>
         /// Creëert een <see cref="IUserIdentity"/> object op basis van de gebruikersnaam en wachtwoord
