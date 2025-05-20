@@ -1,91 +1,65 @@
-name: .NET Desktop CI - Build and Test
+name: .NET Desktop CI/CD for Data Logger
 
 on:
   push:
-    branches: [ "main", "develop" ] # Workflows worden uitgevoerd bij pushes naar main en develop
+    branches: [ "main", "develop" ]
   pull_request:
-    branches: [ "main" ] # En bij pull requests naar main
+    branches: [ "main" ]
 
 jobs:
-  build-test-package:
-    runs-on: windows-latest # Gebruik een Windows runner voor .NET Framework projecten
+  build-and-test:
+    runs-on: windows-latest
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4 
+      uses: actions/checkout@v4
 
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v2
       with:
-        nuget-version: 'latest' # Gebruik de laatste versie van NuGet
+        nuget-version: 'latest'
 
     - name: Restore NuGet packages
-      run: nuget restore "Data Logger/Data Logger.sln" # Herstel packages voor de solution
+      run: nuget restore "Data Logger/Data Logger.sln"
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
       with:
-        msbuild-architecture: x86 # Of x64, afhankelijk van je project. Voor .NET Framework is dit vaak x86.
+        msbuild-architecture: x86 # Of x64, afhankelijk van je project
 
     - name: Build solution
       run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
-      # Zorg dat dit commando zowel je hoofdapplicatie als je testproject bouwt in Release mode.
 
-    - name: Run Unit Tests
-      run: msbuild "Data Logger/Data Logger.sln" /t:VSTest /p:Configuration=Release /p:VSTestTestCaseFilter="Category!=IntegrationTest" /p:VSTestLogger="trx" /p:VSTestResultsDirectory="TestResults/UnitTests"      # Voert unit tests uit (alles wat GEEN IntegrationTest is).
-      # Resultaten worden opgeslagen in TestResults/UnitTests.
-      # De workflow faalt als unit tests falen.
+    - name: Setup VSTest
+      uses: darenm/Setup-VSTest@v1.2
 
-    - name: Run Integration Tests
-      run: msbuild "Data Logger/Data Logger.sln" /t:VSTest /p:Configuration=Release /p:VSTestTestCaseFilter="Category=IntegrationTest" /p:VSTestLogger="trx" /p:VSTestResultsDirectory="TestResults/IntegrationTests"      # Voert integratie tests uit.
-      # Resultaten worden opgeslagen in TestResults/IntegrationTests.
-      # De workflow faalt als integratie tests falen.
-      # BELANGRIJK: Integratietests kunnen afhankelijk zijn van externe services (zoals je Docker container voor OPC UA).
-      # Zorg ervoor dat deze beschikbaar zijn als je integratietests in CI draait.
-      # Overweeg `continue-on-error: true` voor deze stap als je wilt dat de pipeline doorgaat voor packaging, zelfs als integratietests falen.
+    - name: Run Unit Tests (excluding IntegrationTests)
+      run: vstest.console.exe "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" /TestCaseFilter:"Category!=IntegrationTest" /Logger:trx /ResultsDirectory:"UnitTestResults"
+      # Deze stap faalt de workflow als unit tests falen.
+      # Zorg ervoor dat je unit tests de categorie "IntegrationTest" NIET hebben,
+      # of een andere categorie hebben zoals "Unit" en je filtert daarop.
 
     - name: Upload Unit Test Results
       if: always() # Upload altijd, ook als tests falen, voor analyse
       uses: actions/upload-artifact@v4
       with:
         name: unit-test-results
-        path: TestResults/UnitTests/**/*.trx
+        path: UnitTestResults/**/*.trx
 
-    - name: Upload Integration Test Results
-      if: always() # Upload altijd, ook als tests falen, voor analyse
+    # --- Integratietest stappen zijn hier verwijderd ---
+    # - name: Run Integration Tests ...
+    # - name: Upload Integration Test Results ...
+    # - name: Check Integration Test Outcome ...
+
+    - name: Upload Build Artifact (Data Logger Application)
       uses: actions/upload-artifact@v4
       with:
-        name: integration-test-results
-        path: TestResults/IntegrationTests/**/*.trx
-
-    - name: Create Portable Package Directory
-      run: mkdir ./portable-package
-
-    - name: Copy Build Artifacts to Portable Package Directory
-      shell: pwsh
-      run: |
-        $releaseDir = "Data Logger/Data Logger/bin/Release" # Pad naar de output van je hoofdproject
-        if (-not (Test-Path $releaseDir)) {
-          Write-Error "Release directory '$releaseDir' not found. Build might have failed or output path is incorrect."
-          exit 1
-        }
-        Get-ChildItem -Path "$releaseDir" -Filter "*.exe" | Copy-Item -Destination "./portable-package"
-        Get-ChildItem -Path "$releaseDir" -Filter "*.dll" | Copy-Item -Destination "./portable-package"
-        Get-ChildItem -Path "$releaseDir" -Filter "*.config" | Copy-Item -Destination "./portable-package"
-        # Voeg hier andere bestanden of mappen toe die nodig zijn voor je portable app
-        # Let op: -ErrorAction SilentlyContinue is verwijderd; als kritieke bestanden missen, faalt de copy.
-        if (Test-Path "$releaseDir/Logs") { Copy-Item -Path "$releaseDir/Logs" -Destination "./portable-package" -Recurse -Force }
-        if (Test-Path "$releaseDir/LoggedData") { Copy-Item -Path "$releaseDir/LoggedData" -Destination "./portable-package" -Recurse -Force }
-        if (Test-Path "$releaseDir/CertificateStores") { Copy-Item -Path "$releaseDir/CertificateStores" -Destination "./portable-package" -Recurse -Force }
-        Write-Host "Files copied to ./portable-package"
-
-    - name: Zip Portable Package
-      shell: pwsh
-      run: Compress-Archive -Path ./portable-package/* -DestinationPath ./data-logger-portable.zip -Force -ErrorAction Stop
-      # -Force overschrijft een bestaand ZIP-bestand indien nodig.
-
-    - name: Upload Portable Package Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: data-logger-portable-zip
-        path: ./data-logger-portable.zip
+        name: data-logger-application
+        path: |
+          Data Logger/Data Logger/bin/Release/**/*.exe
+          Data Logger/Data Logger/bin/Release/**/*.dll
+          Data Logger/Data Logger/bin/Release/**/*.config
+          # Voeg hier andere bestanden toe die je nodig hebt voor je artefact
+          # Data Logger/Data Logger/bin/Release/Logs
+          # Data Logger/Data Logger/bin/Release/LoggedData
+          # Data Logger/Data Logger/bin/Release/CertificateStores
