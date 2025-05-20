@@ -8,31 +8,19 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: windows-latest
-    
-    env: # Omgevingsvariabelen voor alle stappen in deze job
-      CI_ENVIRONMENT: "true" 
-      OPCUA_TEST_SERVER_ENDPOINT: "opc.tcp://localhost:62541/Quickstarts/ReferenceServer"
-      OPCUA_SERVICE_CONTAINER_NAME: opcua-refserver # Naam van de service container
+    runs-on: windows-latest # Blijf op Windows voor je .NET Framework build
 
-    services: 
-      opcua-refserver: # Dit is de naam/label van de service
-        image: ghcr.io/opcfoundation/uanetstandard/refserver:latest
-        ports:
-          - 62541:62541
-        # BELANGRIJK: Voeg hier de server argumenten toe die je in DockerTestHelper.cs gebruikt (-a -c -s)
-        # Dit is afhankelijk van hoe de image argumenten accepteert. Voorbeelden:
-        # options: >-
-        #   -a 
-        #   -c 
-        #   -s
-        # Of via 'command' of 'entrypoint' als de image documentatie dat aangeeft.
-        # Zonder de juiste argumenten (vooral -a voor auto-accept) kunnen je tests alsnog falen.
+    env:
+      # CI_ENVIRONMENT: "true" # Deze is nu minder relevant als de YAML de container beheert
+      OPCUA_TEST_SERVER_ENDPOINT: "opc.tcp://localhost:62541/Quickstarts/ReferenceServer"
+      OPCUA_DOCKER_IMAGE: ghcr.io/opcfoundation/uanetstandard/refserver:latest
+      OPCUA_CONTAINER_NAME: ci-opcua-refserver-${{ github.run_id }} # Unieke naam per run
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    # ... (Setup NuGet, Restore, Setup MSBuild, Build solution blijven hetzelfde) ...
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v2
       with:
@@ -49,10 +37,22 @@ jobs:
     - name: Build solution
       run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
 
+    - name: Start OPC UA Reference Server in Docker
+      shell: pwsh
+      run: |
+        Write-Host "Stopping and removing any existing container named ${{ env.OPCUA_CONTAINER_NAME }}..."
+        docker stop ${{ env.OPCUA_CONTAINER_NAME }} 2>$null || true
+        docker rm ${{ env.OPCUA_CONTAINER_NAME }} 2>$null || true
+
+        Write-Host "Starting OPC UA reference server container (${{ env.OPCUA_CONTAINER_NAME }})..."
+        # Voeg hier de server argumenten toe, bijv. -a -c -s. Pas aan naar hoe de image ze accepteert.
+        docker run -d --name ${{ env.OPCUA_CONTAINER_NAME }} -p 62541:62541 ${{ env.OPCUA_DOCKER_IMAGE }} -a -c -s 
+        # De argumenten "-a -c -s" zijn een voorbeeld; controleer de image documentatie.
+
     - name: Wait for OPC UA Reference Server
       shell: pwsh
       run: |
-        $serviceName = "${{ env.OPCUA_SERVICE_CONTAINER_NAME }}"
+        $serviceName = "${{ env.OPCUA_CONTAINER_NAME }}"
         $timeoutSeconds = 180 # 3 minuten
         $intervalSeconds = 10
         $elapsedSeconds = 0
@@ -61,25 +61,21 @@ jobs:
         Write-Host "Wachten tot OPC UA server (container: $serviceName) is opgestart..."
 
         while ($elapsedSeconds -lt $timeoutSeconds) {
-          # Controleer of de container nog draait (optioneel, maar goed voor debuggen)
           $containerState = docker ps --filter "name=$serviceName" --format "{{.State}}"
           if ($containerState -ne "running") {
             Write-Error "Container $serviceName draait niet meer. Status: $containerState"
-            docker logs $serviceName --tail 50 # Laatste logs voor diagnose
+            docker logs $serviceName --tail 50
             exit 1
           }
-
           Write-Host "Controleren van logs voor '$serviceName' (verstreken tijd: ${elapsedSeconds}s)..."
-          # Combineer stdout en stderr voor het geval de melding op stderr komt
           $containerLogs = docker logs $serviceName 2>&1 
-          
-          # De Regex is afgeleid van je DockerTestHelper.cs
+
           if ($containerLogs -match 'Server\s+started\.(?:\s+Press\s+Ctrl-C\s+to\s+exit\.\.\.)?') {
             Write-Host "OPC UA server ($serviceName) is succesvol gestart!"
             $serverStarted = $true
             break
           }
-          
+
           Write-Host "Server nog niet volledig gestart. Wachten voor ${intervalSeconds}s..."
           Start-Sleep -Seconds $intervalSeconds
           $elapsedSeconds += $intervalSeconds
@@ -88,11 +84,9 @@ jobs:
         if (-not $serverStarted) {
           Write-Error "Timeout: OPC UA server ($serviceName) is niet gestart binnen ${timeoutSeconds} seconden."
           Write-Host "Laatste beschikbare logs voor $serviceName bij timeout:"
-          docker logs $serviceName --tail 100 # Toon de laatste 100 regels van de log voor diagnose
+          docker logs $serviceName --tail 100
           exit 1
         }
-      # Deze stap moet een `id` hebben als andere stappen ervan afhankelijk zijn via `needs`.
-      # In dit geval draaien de tests gewoon hierna.
 
     - name: Setup VSTest
       uses: darenm/Setup-VSTest@v1.2
@@ -108,6 +102,8 @@ jobs:
         path: TestResults/UnitTests/**/*.trx
 
     - name: Run Integration Tests
+      # De OPCUA_TEST_SERVER_ENDPOINT env variabele wordt gebruikt door de testcode.
+      # CI_ENVIRONMENT kan nu eventueel weg als de YAML de container altijd beheert in CI.
       run: vstest.console.exe "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" /TestCaseFilter:"Category=IntegrationTest" /Logger:trx /ResultsDirectory:"TestResults/IntegrationTests"
 
     - name: Upload Integration Test Results
@@ -116,11 +112,22 @@ jobs:
       with:
         name: integration-test-results
         path: TestResults/IntegrationTests/**/*.trx
-        
+
+    - name: Stop OPC UA Reference Server
+      if: always() # Zorg dat de container altijd gestopt wordt, ook als tests falen
+      shell: pwsh
+      run: |
+        Write-Host "Stopping OPC UA reference server container (${{ env.OPCUA_CONTAINER_NAME }})..."
+        docker stop ${{ env.OPCUA_CONTAINER_NAME }} 2>$null || true
+        docker rm ${{ env.OPCUA_CONTAINER_NAME }} 2>$null || true
+        Write-Host "Container ${{ env.OPCUA_CONTAINER_NAME }} gestopt en verwijderd."
+
+    # ... (Packaging stappen blijven hetzelfde) ...
     - name: Create Portable Package Directory
       run: mkdir ./portable-package
 
     - name: Copy Build Artifacts to Portable Package Directory
+      # ... (deze stap blijft zoals in het vorige antwoord) ...
       shell: pwsh
       run: |
         $releaseDir = "Data Logger/Data Logger/bin/Release"
