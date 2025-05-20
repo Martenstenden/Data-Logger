@@ -43,22 +43,22 @@ jobs:
     # - name: Build solution (with Roslyn Analyzer errors)
     #   run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU" /p:TreatWarningsAsErrors=true
 
-    - name: Install Coverlet
-      run: dotnet tool install --global coverlet.console
+    # - name: Install Coverlet
+    #   run: dotnet tool install --global coverlet.console
 
-    - name: Run Unit Tests with Coverage
-      shell: pwsh
-      run: |
-        $testAssembly = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" # Controleer dit pad!
-        $testTargetArgs = "\`"$testAssembly\`" /TestCaseFilter:\"Category!=IntegrationTest\" /Logger:trx /ResultsDirectory:\"UnitTestResults\""
-        coverlet $testAssembly --target "vstest.console.exe" --targetargs $testTargetArgs --format "cobertura" --output "coverage/cobertura.xml" --exclude-by-attribute "GeneratedCodeAttribute" --exclude "[Data?Logger.Views?]*.xaml.cs" "[Data?Logger?]*.AssemblyInfo.cs" "[Data?Logger?]*.Designer.cs"
+    # - name: Run Unit Tests with Coverage
+    #   shell: pwsh
+    #   run: |
+    #     $testAssembly = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" # Controleer dit pad!
+    #     $testTargetArgs = "\`"$testAssembly\`" /TestCaseFilter:\"Category!=IntegrationTest\" /Logger:trx /ResultsDirectory:\"UnitTestResults\""
+    #     coverlet $testAssembly --target "vstest.console.exe" --targetargs $testTargetArgs --format "cobertura" --output "coverage/cobertura.xml" --exclude-by-attribute "GeneratedCodeAttribute" --exclude "[Data?Logger.Views?]*.xaml.cs" "[Data?Logger?]*.AssemblyInfo.cs" "[Data?Logger?]*.Designer.cs"
 
-    - name: Upload Unit Test Results
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: unit-test-results
-        path: UnitTestResults/**/*.trx
+    # - name: Upload Unit Test Results
+    #   if: always()
+    #   uses: actions/upload-artifact@v4
+    #   with:
+    #     name: unit-test-results
+    #     path: UnitTestResults/**/*.trx
         
     - name: Setup VSTest
       uses: darenm/Setup-VSTest@v1.2
