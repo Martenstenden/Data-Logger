@@ -1,87 +1,64 @@
-name: .NET Desktop CI/CD for Data Logger
+name: .NET Desktop CI - Build and Test
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: [ "main", "develop" ] # Workflows worden uitgevoerd bij pushes naar main en develop
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main" ] # En bij pull requests naar main
 
 jobs:
-  build-and-test:
-    runs-on: windows-latest
+  build-test-package:
+    runs-on: windows-latest # Gebruik een Windows runner voor .NET Framework projecten
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Cache NuGet packages
-      uses: actions/cache@v4
-      with:
-        path: ~/.nuget/packages
-        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.config') }}-${{ hashFiles('**/*.csproj') }}
-        restore-keys: |
-          ${{ runner.os }}-nuget-
-
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v2
       with:
-        nuget-version: 'latest'
+        nuget-version: 'latest' # Gebruik de laatste versie van NuGet
 
     - name: Restore NuGet packages
-      run: nuget restore "Data Logger/Data Logger.sln"
+      run: nuget restore "Data Logger/Data Logger.sln" # Herstel packages voor de solution
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
       with:
-        msbuild-architecture: x86 # Of x64, afhankelijk van je project
+        msbuild-architecture: x86 # Of x64, afhankelijk van je project. Voor .NET Framework is dit vaak x86.
 
-    # - name: Code Formatting Check (dotnet format)
-    #   run: |
-    #     dotnet tool install --global dotnet-format --version 8.*
-    #     dotnet format "Data Logger/Data Logger.sln" --verify-no-changes --verbosity diagnostic
+    - name: Build solution
+      run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
+      # Zorg dat dit commando zowel je hoofdapplicatie als je testproject bouwt in Release mode.
 
-    # - name: Build solution (with Roslyn Analyzer errors)
-    #   run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU" /p:TreatWarningsAsErrors=true
+    - name: Run Unit Tests
+      run: vstest.console.exe "DataLogger.Tests/bin/Debug/DataLogger.Tests.dll" /TestCaseFilter:"Category!=IntegrationTest" /Logger:trx /ResultsDirectory:"TestResults/UnitTests"
+      # Voert unit tests uit (alles wat GEEN IntegrationTest is).
+      # Resultaten worden opgeslagen in TestResults/UnitTests.
+      # De workflow faalt als unit tests falen.
 
-    # - name: Install Coverlet
-    #   run: dotnet tool install --global coverlet.console
-
-    # - name: Run Unit Tests with Coverage
-    #   shell: pwsh
-    #   run: |
-    #     $testAssembly = "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" # Controleer dit pad!
-    #     $testTargetArgs = "\`"$testAssembly\`" /TestCaseFilter:\"Category!=IntegrationTest\" /Logger:trx /ResultsDirectory:\"UnitTestResults\""
-    #     coverlet $testAssembly --target "vstest.console.exe" --targetargs $testTargetArgs --format "cobertura" --output "coverage/cobertura.xml" --exclude-by-attribute "GeneratedCodeAttribute" --exclude "[Data?Logger.Views?]*.xaml.cs" "[Data?Logger?]*.AssemblyInfo.cs" "[Data?Logger?]*.Designer.cs"
-
-    # - name: Upload Unit Test Results
-    #   if: always()
-    #   uses: actions/upload-artifact@v4
-    #   with:
-    #     name: unit-test-results
-    #     path: UnitTestResults/**/*.trx
-        
-    - name: Setup VSTest
-      uses: darenm/Setup-VSTest@v1.2
-
-    - name: Run Unit Tests (excluding IntegrationTests)
-      run: vstest.console.exe "DataLogger.Tests/bin/Release/DataLogger.Tests.dll" /TestCaseFilter:"Category!=IntegrationTest" /Logger:trx /ResultsDirectory:"UnitTestResults"
-      # Deze stap faalt de workflow als unit tests falen.
-      # Zorg ervoor dat je unit tests de categorie "IntegrationTest" NIET hebben,
-      # of een andere categorie hebben zoals "Unit" en je filtert daarop.
+    - name: Run Integration Tests
+      run: vstest.console.exe "DataLogger.Tests/bin/Debug/DataLogger.Tests.dll" /TestCaseFilter:"Category=IntegrationTest" /Logger:trx /ResultsDirectory:"TestResults/IntegrationTests"
+      # Voert integratie tests uit.
+      # Resultaten worden opgeslagen in TestResults/IntegrationTests.
+      # De workflow faalt als integratie tests falen.
+      # BELANGRIJK: Integratietests kunnen afhankelijk zijn van externe services (zoals je Docker container voor OPC UA).
+      # Zorg ervoor dat deze beschikbaar zijn als je integratietests in CI draait.
+      # Overweeg `continue-on-error: true` voor deze stap als je wilt dat de pipeline doorgaat voor packaging, zelfs als integratietests falen.
 
     - name: Upload Unit Test Results
       if: always() # Upload altijd, ook als tests falen, voor analyse
       uses: actions/upload-artifact@v4
       with:
         name: unit-test-results
-        path: UnitTestResults/**/*.trx
+        path: TestResults/UnitTests/**/*.trx
 
-    - name: Upload Coverage Report
-      if: always()
+    - name: Upload Integration Test Results
+      if: always() # Upload altijd, ook als tests falen, voor analyse
       uses: actions/upload-artifact@v4
       with:
-        name: code-coverage-report
-        path: coverage/cobertura.xml
+        name: integration-test-results
+        path: TestResults/IntegrationTests/**/*.trx
 
     - name: Create Portable Package Directory
       run: mkdir ./portable-package
@@ -89,48 +66,28 @@ jobs:
     - name: Copy Build Artifacts to Portable Package Directory
       shell: pwsh
       run: |
-        $releaseDir = "Data Logger/Data Logger/bin/Release"
-        Copy-Item -Path "$releaseDir/*.exe" -Destination "./portable-package" -ErrorAction SilentlyContinue
-        Copy-Item -Path "$releaseDir/*.dll" -Destination "./portable-package" -ErrorAction SilentlyContinue
-        Copy-Item -Path "$releaseDir/*.config" -Destination "./portable-package" -ErrorAction SilentlyContinue
+        $releaseDir = "Data Logger/Data Logger/bin/Release" # Pad naar de output van je hoofdproject
+        if (-not (Test-Path $releaseDir)) {
+          Write-Error "Release directory '$releaseDir' not found. Build might have failed or output path is incorrect."
+          exit 1
+        }
+        Get-ChildItem -Path "$releaseDir" -Filter "*.exe" | Copy-Item -Destination "./portable-package"
+        Get-ChildItem -Path "$releaseDir" -Filter "*.dll" | Copy-Item -Destination "./portable-package"
+        Get-ChildItem -Path "$releaseDir" -Filter "*.config" | Copy-Item -Destination "./portable-package"
         # Voeg hier andere bestanden of mappen toe die nodig zijn voor je portable app
-        if (Test-Path "$releaseDir/Logs") { Copy-Item -Path "$releaseDir/Logs" -Destination "./portable-package" -Recurse -Force -ErrorAction SilentlyContinue }
-        if (Test-Path "$releaseDir/LoggedData") { Copy-Item -Path "$releaseDir/LoggedData" -Destination "./portable-package" -Recurse -Force -ErrorAction SilentlyContinue }
-        if (Test-Path "$releaseDir/CertificateStores") { Copy-Item -Path "$releaseDir/CertificateStores" -Destination "./portable-package" -Recurse -Force -ErrorAction SilentlyContinue }
+        # Let op: -ErrorAction SilentlyContinue is verwijderd; als kritieke bestanden missen, faalt de copy.
+        if (Test-Path "$releaseDir/Logs") { Copy-Item -Path "$releaseDir/Logs" -Destination "./portable-package" -Recurse -Force }
+        if (Test-Path "$releaseDir/LoggedData") { Copy-Item -Path "$releaseDir/LoggedData" -Destination "./portable-package" -Recurse -Force }
+        if (Test-Path "$releaseDir/CertificateStores") { Copy-Item -Path "$releaseDir/CertificateStores" -Destination "./portable-package" -Recurse -Force }
+        Write-Host "Files copied to ./portable-package"
 
     - name: Zip Portable Package
       shell: pwsh
-      run: Compress-Archive -Path ./portable-package/* -DestinationPath ./data-logger-portable.zip -ErrorAction Stop
+      run: Compress-Archive -Path ./portable-package/* -DestinationPath ./data-logger-portable.zip -Force -ErrorAction Stop
+      # -Force overschrijft een bestaand ZIP-bestand indien nodig.
 
-    - name: Upload Portable Package Artifact (voor interne inspectie/andere jobs)
+    - name: Upload Portable Package Artifact
       uses: actions/upload-artifact@v4
       with:
         name: data-logger-portable-zip
         path: ./data-logger-portable.zip
-
-    # Deployment: Maak een GitHub Release en upload het ZIP-bestand
-    - name: Create GitHub Release
-      if: startsWith(github.ref, 'refs/tags/v') # Alleen uitvoeren voor tags (bijv. v1.0.0)
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref_name }}
-        release_name: Data Logger ${{ github.ref_name }}
-        body: |
-          Data Logger Release ${{ github.ref_name }}
-          Portable application package.
-        draft: false
-        prerelease: contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc')
-
-    - name: Upload Release Asset (Portable ZIP)
-      if: startsWith(github.ref, 'refs/tags/v')
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./data-logger-portable.zip
-        asset_name: data-logger-${{ github.ref_name }}.zip
-        asset_content_type: application/zip
