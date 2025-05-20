@@ -31,9 +31,6 @@ jobs:
       run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU"
       # Zorg dat dit commando zowel je hoofdapplicatie als je testproject bouwt in Release mode.
 
-    - name: Setup Developer Command Prompt environment
-      uses: microsoft/setup-vsdevcmd@v1
-
     - name: Run Unit Tests
       run: msbuild "Data Logger/Data Logger.sln" /t:VSTest /p:Configuration=Release /p:VSTestTestCaseFilter="Category!=IntegrationTest" /p:VSTestLogger="trx" /p:VSTestResultsDirectory="TestResults/UnitTests"      # Voert unit tests uit (alles wat GEEN IntegrationTest is).
       # Resultaten worden opgeslagen in TestResults/UnitTests.
