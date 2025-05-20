@@ -2,7 +2,7 @@ name: .NET Desktop CI - Build, Unit Test, and Package
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: [ "main", "develop" ] 
   pull_request:
     branches: [ "main" ]
 
