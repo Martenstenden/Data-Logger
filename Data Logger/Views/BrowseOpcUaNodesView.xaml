@@ -1,33 +1,59 @@
-﻿<Window x:Class="Data_Logger.Views.BrowseOpcUaNodesView"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        mc:Ignorable="d"
-        Title="BrowseOpcUaNodesView" Height="450" Width="800">
+﻿<Window
+    Height="450"
+    Title="BrowseOpcUaNodesView"
+    Width="800"
+    mc:Ignorable="d"
+    x:Class="Data_Logger.Views.BrowseOpcUaNodesView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </Window.Resources>
     <Grid Margin="10">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/> <RowDefinition Height="*"/>   <RowDefinition Height="Auto"/> </Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,5">
-            <Button Content="Omhoog" Command="{Binding GoUpCommand}" MinWidth="70" Margin="0,0,10,0"/>
-            <TextBlock Text="{Binding CurrentBrowsePathDisplay}" VerticalAlignment="Center" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+        <StackPanel
+            Grid.Row="0"
+            Margin="0,0,0,5"
+            Orientation="Horizontal">
+            <Button
+                Command="{Binding GoUpCommand}"
+                Content="Omhoog"
+                Margin="0,0,10,0"
+                MinWidth="70" />
+            <TextBlock
+                FontWeight="SemiBold"
+                Text="{Binding CurrentBrowsePathDisplay}"
+                TextTrimming="CharacterEllipsis"
+                VerticalAlignment="Center" />
         </StackPanel>
-        
-        <ListView Grid.Row="1" x:Name="NodesListView"
-                  ItemsSource="{Binding CurrentNodes}" 
-                  SelectedItem="{Binding SelectedNodeInView}" 
-                  SelectionMode="Single" Margin="0,0,0,5"
-                  HorizontalContentAlignment="Stretch">
+
+        <ListView
+            Grid.Row="1"
+            HorizontalContentAlignment="Stretch"
+            ItemsSource="{Binding CurrentNodes}"
+            Margin="0,0,0,5"
+            SelectedItem="{Binding SelectedNodeInView}"
+            SelectionMode="Single"
+            x:Name="NodesListView">
             <ListView.InputBindings>
-                <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding BrowseDeeperCommand}" CommandParameter="{Binding SelectedItem, ElementName=NodesListView}"/>
+                <MouseBinding
+                    Command="{Binding BrowseDeeperCommand}"
+                    CommandParameter="{Binding SelectedItem, ElementName=NodesListView}"
+                    MouseAction="LeftDoubleClick" />
             </ListView.InputBindings>
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding NodeClass}" Value="Variable">
-                            <Setter Property="FontWeight" Value="Bold"/>
+                            <Setter Property="FontWeight" Value="Bold" />
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
@@ -38,23 +64,47 @@
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding DisplayName}" />
+                                    <TextBlock Text="{Binding DisplayName}" d:DataContext="{d:DesignInstance}" />
                                 </StackPanel>
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn Header="NodeClass" DisplayMemberBinding="{Binding NodeClass}" Width="100"/>
-                    <GridViewColumn Header="NodeId" DisplayMemberBinding="{Binding NodeId}" Width="200"/>
+                    <GridViewColumn
+                        DisplayMemberBinding="{Binding NodeClass}"
+                        Header="NodeClass"
+                        Width="100" />
+                    <GridViewColumn
+                        DisplayMemberBinding="{Binding NodeId}"
+                        Header="NodeId"
+                        Width="200" />
                 </GridView>
             </ListView.View>
         </ListView>
-        
-        <TextBlock Grid.Row="1" Text="Laden..." FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"
-                   Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-            <Button Content="Selecteer" Command="{Binding SelectNodeCommand}" IsDefault="True" MinWidth="80" Margin="0,0,10,0"/>
-            <Button Content="Annuleren" Command="{Binding CancelCommand}" IsCancel="True" MinWidth="80"/>
+        <TextBlock
+            FontSize="16"
+            Grid.Row="1"
+            HorizontalAlignment="Center"
+            Text="Laden..."
+            VerticalAlignment="Center"
+            Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+        <StackPanel
+            Grid.Row="2"
+            HorizontalAlignment="Right"
+            Margin="0,10,0,0"
+            Orientation="Horizontal">
+            <Button
+                Command="{Binding SelectNodeCommand}"
+                Content="Selecteer"
+                IsDefault="True"
+                Margin="0,0,10,0"
+                MinWidth="80" />
+            <Button
+                Command="{Binding CancelCommand}"
+                Content="Annuleren"
+                IsCancel="True"
+                MinWidth="80" />
         </StackPanel>
     </Grid>
 </Window>

@@ -1,38 +1,30 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.Windows.Data;
 
 namespace Data_Logger.Converters
 {
     /// <summary>
-    /// Converteert een boolean waarde die de connectiestatus representeert
-    /// naar een gebruiksvriendelijke string.
+    /// Converteert een object naar een boolean waarde.
+    /// Retourneert true als de waarde niet null is, anders false.
     /// </summary>
-    public class BooleanToConnectionStatusConverter : IValueConverter
+    public class NullToBooleanConverter : IValueConverter
     {
         /// <summary>
-        /// Converteert een boolean naar een connectiestatus string.
+        /// Converteert een object naar true als het niet null is, anders false.
         /// </summary>
-        /// <param name="value">De boolean waarde die geconverteerd moet worden. True voor verbonden, False voor niet verbonden.</param>
+        /// <param name="value">Het object dat geëvalueerd moet worden.</param>
         /// <param name="targetType">Het type van de binding target property (niet gebruikt).</param>
         /// <param name="parameter">De converter parameter (niet gebruikt).</param>
         /// <param name="culture">De cultuur om te gebruiken in de converter (niet gebruikt).</param>
-        /// <returns>
-        /// "Verbonden" als <paramref name="value"/> true is.
-        /// "Niet Verbonden" als <paramref name="value"/> false is.
-        /// "Onbekend" als <paramref name="value"/> geen boolean is of null.
-        /// </returns>
+        /// <returns>True als <paramref name="value"/> niet null is; anders false.</returns>
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is bool isConnected)
-            {
-                return isConnected ? "Verbonden" : "Niet Verbonden";
-            }
-            return "Onbekend"; // Fallback voor onverwachte types
+            return value != null;
         }
 
         /// <summary>
-        /// Converteert een connectiestatus string terug naar een boolean.
+        /// Converteert een boolean terug naar een object.
         /// Deze methode is niet geïmplementeerd omdat de conversie typisch eenrichtingsverkeer is.
         /// </summary>
         /// <param name="value">De waarde die geconverteerd moet worden (niet gebruikt).</param>
@@ -40,7 +32,9 @@ namespace Data_Logger.Converters
         /// <param name="parameter">De converter parameter (niet gebruikt).</param>
         /// <param name="culture">De cultuur om te gebruiken in de converter (niet gebruikt).</param>
         /// <returns>Gooit altijd <see cref="NotImplementedException"/>.</returns>
-        /// <exception cref="NotImplementedException">Deze methode is niet geïmplementeerd.</exception>
+        /// <exception cref="NotImplementedException">
+        /// Deze methode is niet geïmplementeerd. Conversie van boolean naar (potentieel null) object is context-specifiek.
+        /// </exception>
         public object ConvertBack(
             object value,
             Type targetType,
@@ -49,7 +43,7 @@ namespace Data_Logger.Converters
         )
         {
             throw new NotImplementedException(
-                "Conversie van status string terug naar boolean is niet ondersteund."
+                "NullToBooleanConverter.ConvertBack is niet geïmplementeerd."
             );
         }
     }

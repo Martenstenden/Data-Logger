@@ -1,38 +1,38 @@
-using System;
+﻿using System;
 using System.Globalization;
+using System.Windows;
 using System.Windows.Data;
 
 namespace Data_Logger.Converters
 {
     /// <summary>
-    /// Converteert een boolean waarde die de connectiestatus representeert
-    /// naar een gebruiksvriendelijke string.
+    /// Converteert een integer (aantal) naar een <see cref="Visibility"/> waarde.
+    /// Typisch gebruikt om UI-elementen zichtbaar te maken als het aantal groter dan nul is.
     /// </summary>
-    public class BooleanToConnectionStatusConverter : IValueConverter
+    public class CountToVisibilityConverter : IValueConverter
     {
         /// <summary>
-        /// Converteert een boolean naar een connectiestatus string.
+        /// Converteert een integer aantal naar <see cref="Visibility.Visible"/> of <see cref="Visibility.Collapsed"/>.
         /// </summary>
-        /// <param name="value">De boolean waarde die geconverteerd moet worden. True voor verbonden, False voor niet verbonden.</param>
+        /// <param name="value">Het integer aantal dat geconverteerd moet worden.</param>
         /// <param name="targetType">Het type van de binding target property (niet gebruikt).</param>
         /// <param name="parameter">De converter parameter (niet gebruikt).</param>
         /// <param name="culture">De cultuur om te gebruiken in de converter (niet gebruikt).</param>
         /// <returns>
-        /// "Verbonden" als <paramref name="value"/> true is.
-        /// "Niet Verbonden" als <paramref name="value"/> false is.
-        /// "Onbekend" als <paramref name="value"/> geen boolean is of null.
+        /// <see cref="Visibility.Visible"/> als <paramref name="value"/> een integer is en groter dan 0.
+        /// <see cref="Visibility.Collapsed"/> in alle andere gevallen.
         /// </returns>
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is bool isConnected)
+            if (value is int count)
             {
-                return isConnected ? "Verbonden" : "Niet Verbonden";
+                return count > 0 ? Visibility.Visible : Visibility.Collapsed;
             }
-            return "Onbekend"; // Fallback voor onverwachte types
+            return Visibility.Collapsed;
         }
 
         /// <summary>
-        /// Converteert een connectiestatus string terug naar een boolean.
+        /// Converteert een <see cref="Visibility"/> waarde terug naar een integer aantal.
         /// Deze methode is niet geïmplementeerd omdat de conversie typisch eenrichtingsverkeer is.
         /// </summary>
         /// <param name="value">De waarde die geconverteerd moet worden (niet gebruikt).</param>
@@ -49,7 +49,7 @@ namespace Data_Logger.Converters
         )
         {
             throw new NotImplementedException(
-                "Conversie van status string terug naar boolean is niet ondersteund."
+                "Conversie van Visibility terug naar count is niet ondersteund."
             );
         }
     }

@@ -1,18 +1,45 @@
-﻿namespace Data_Logger.Enums;
-
-public enum TagAlarmState
+﻿namespace Data_Logger.Enums // Puntkomma verwijderd
 {
-    Normal,
+    /// <summary>
+    /// Definieert de mogelijke alarmstatussen voor een gemonitorde tag.
+    /// </summary>
+    public enum TagAlarmState
+    {
+        /// <summary>
+        /// De tag bevindt zich binnen normale operationele grenzen.
+        /// </summary>
+        Normal,
 
-    High,
+        /// <summary>
+        /// De tagwaarde heeft een hoge alarmgrens overschreden.
+        /// </summary>
+        High,
 
-    HighHigh,
+        /// <summary>
+        /// De tagwaarde heeft een zeer hoge (HighHigh) alarmgrens overschreden.
+        /// </summary>
+        HighHigh,
 
-    Low,
+        /// <summary>
+        /// De tagwaarde heeft een lage alarmgrens onderschreden.
+        /// </summary>
+        Low,
 
-    LowLow,
+        /// <summary>
+        /// De tagwaarde heeft een zeer lage (LowLow) alarmgrens onderschreden.
+        /// </summary>
+        LowLow,
 
-    Outlier,
+        /// <summary>
+        /// De tagwaarde wordt beschouwd als een statistische uitschieter (outlier)
+        /// ten opzichte van zijn normale gedragspatroon.
+        /// </summary>
+        Outlier,
 
-    Error,
+        /// <summary>
+        /// Er is een fout opgetreden bij het lezen of interpreteren van de tagwaarde,
+        /// of de kwaliteit van de data is slecht.
+        /// </summary>
+        Error,
+    }
 }

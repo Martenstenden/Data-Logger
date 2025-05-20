@@ -8,34 +8,42 @@
 
 //------------------------------------------------------------------------------
 
+using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Resources;
+using System.Runtime.CompilerServices;
+
 namespace Data_Logger.Properties
 {
-    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder",
+    [GeneratedCode("System.Resources.Tools.StronglyTypedResourceBuilder",
         "4.0.0.0")]
-    [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-    [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
+    [DebuggerNonUserCode()]
+    [CompilerGenerated()]
     internal class Resources
     {
-        private static global::System.Resources.ResourceManager resourceMan;
+        private static ResourceManager resourceMan;
 
-        private static global::System.Globalization.CultureInfo resourceCulture;
+        private static CultureInfo resourceCulture;
 
-        [global::System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("Microsoft.Performance",
+        [SuppressMessage("Microsoft.Performance",
             "CA1811:AvoidUncalledPrivateCode")]
         internal Resources()
         {
         }
 
-        [global::System.ComponentModel.EditorBrowsableAttribute(global::System.ComponentModel.EditorBrowsableState
+        [EditorBrowsable(EditorBrowsableState
             .Advanced)]
-        internal static global::System.Resources.ResourceManager ResourceManager
+        internal static ResourceManager ResourceManager
         {
             get
             {
                 if ((resourceMan == null))
                 {
-                    global::System.Resources.ResourceManager temp =
-                        new global::System.Resources.ResourceManager("Data_Logger.Properties.Resources",
+                    ResourceManager temp =
+                        new ResourceManager("Data_Logger.Properties.Resources",
                             typeof(Resources).Assembly);
                     resourceMan = temp;
                 }
@@ -44,9 +52,9 @@ namespace Data_Logger.Properties
             }
         }
 
-        [global::System.ComponentModel.EditorBrowsableAttribute(global::System.ComponentModel.EditorBrowsableState
+        [EditorBrowsable(EditorBrowsableState
             .Advanced)]
-        internal static global::System.Globalization.CultureInfo Culture
+        internal static CultureInfo Culture
         {
             get { return resourceCulture; }
             set { resourceCulture = value; }

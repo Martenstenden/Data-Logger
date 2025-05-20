@@ -4,6 +4,6 @@
     xmlns:converters1="clr-namespace:Data_Logger.Converters"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
-        <converters1:BooleanToConnectionStatusConverter x:Key="BooleanToConnectionStatusConverter" xmlns:converters="clr-namespace:Data_Logger.Converters" />
+        <converters1:BooleanToConnectionStatusConverter x:Key="BooleanToConnectionStatusConverter" />
     </Application.Resources>
 </Application>

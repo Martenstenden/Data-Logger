@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -14,19 +13,24 @@ using Serilog;
 
 namespace Data_Logger.ViewModels
 {
+    /// <summary>
+    /// De hoofd ViewModel voor de Data Logger applicatie.
+    /// Beheert de actieve dataverbinding-tabs en de algemene applicatiestatus.
+    /// </summary>
     public class MainViewModel : ObservableObject
     {
         private readonly ILogger _logger;
         private readonly IStatusService _statusService;
         private readonly ISettingsService _settingsService;
-        private readonly Func<Action, SettingsViewModel> _settingsViewModelFactory;
-
         private readonly Func<ModbusTcpConnectionConfig, IModbusService> _modbusServiceFactory;
         private readonly Func<OpcUaConnectionConfig, IOpcUaService> _opcUaServiceFactory;
-
         private readonly IDataLoggingService _dataLoggingService;
 
         private string _applicationTitle = "Data Logger Applicatie";
+
+        /// <summary>
+        /// Haalt de titel van de applicatie op of stelt deze in, welke in het hoofdvenster getoond kan worden.
+        /// </summary>
         public string ApplicationTitle
         {
             get => _applicationTitle;
@@ -34,49 +38,83 @@ namespace Data_Logger.ViewModels
         }
 
         public LogViewModel LogVm { get; }
+
+        /// <summary>
+        /// Haalt de huidige status van de applicatie op vanuit de <see cref="IStatusService"/>.
+        /// </summary>
         public ApplicationStatus CurrentApplicationStatus => _statusService.CurrentStatus;
+
+        /// <summary>
+        /// Haalt het bericht dat de huidige applicatiestatus beschrijft op vanuit de <see cref="IStatusService"/>.
+        /// </summary>
         public string CurrentStatusMessage => _statusService.StatusMessage;
 
+        /// <summary>
+        /// Haalt een observeerbare collectie van actieve tab ViewModels op. Elke tab representeert een dataverbinding.
+        /// </summary>
         public ObservableCollection<TabViewModelBase> ActiveTabs { get; } =
             new ObservableCollection<TabViewModelBase>();
 
         private TabViewModelBase _selectedTab;
+
+        /// <summary>
+        /// Haalt de momenteel geselecteerde tab ViewModel op of stelt deze in.
+        /// </summary>
         public TabViewModelBase SelectedTab
         {
             get => _selectedTab;
             set => SetProperty(ref _selectedTab, value);
         }
 
+        private readonly Func<Action, SettingsViewModel> _settingsViewModelFactory;
+
         public ICommand OpenSettingsCommand { get; }
 
+        /// <summary>
+        /// Initialiseert een nieuwe instantie van de <see cref="MainViewModel"/> klasse.
+        /// </summary>
+        /// <param name="logViewModel"></param>
+        /// <param name="logger">De Serilog logger instantie.</param>
+        /// <param name="statusService">De service voor het beheren van de applicatiestatus.</param>
+        /// <param name="settingsService">De service voor het beheren van applicatie-instellingen.</param>
+        /// <param name="dataLoggingService">De service voor het loggen van data.</param>
+        /// <param name="modbusServiceFactory">Een factory functie om <see cref="IModbusService"/> instanties te creëren.</param>
+        /// <param name="opcUaServiceFactory">Een factory functie om <see cref="IOpcUaService"/> instanties te creëren.</param>
+        /// <param name="settingsViewModelFactory">Een factory functie om <see cref="ISettingsService"/> instanties te creëren.</param>
         public MainViewModel(
-            ILogger logger,
             LogViewModel logViewModel,
+            ILogger logger,
             IStatusService statusService,
             ISettingsService settingsService,
-            Func<Action, SettingsViewModel> settingsViewModelFactory,
+            IDataLoggingService dataLoggingService,
             Func<ModbusTcpConnectionConfig, IModbusService> modbusServiceFactory,
             Func<OpcUaConnectionConfig, IOpcUaService> opcUaServiceFactory,
-            IDataLoggingService dataLoggingService
+            Func<Action, SettingsViewModel> settingsViewModelFactory
         )
         {
-            _logger = logger;
-            LogVm = logViewModel;
-            _statusService = statusService;
-            _settingsService = settingsService;
-            _settingsViewModelFactory = settingsViewModelFactory;
-
-            _modbusServiceFactory = modbusServiceFactory;
-            _opcUaServiceFactory = opcUaServiceFactory;
-
-            _dataLoggingService = dataLoggingService;
+            LogVm = logViewModel ?? throw new ArgumentNullException(nameof(logViewModel));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _statusService =
+                statusService ?? throw new ArgumentNullException(nameof(statusService));
+            _settingsService =
+                settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+            _modbusServiceFactory =
+                modbusServiceFactory
+                ?? throw new ArgumentNullException(nameof(modbusServiceFactory));
+            _opcUaServiceFactory =
+                opcUaServiceFactory ?? throw new ArgumentNullException(nameof(opcUaServiceFactory));
+            _dataLoggingService =
+                dataLoggingService ?? throw new ArgumentNullException(nameof(dataLoggingService));
+            _settingsViewModelFactory =
+                settingsViewModelFactory
+                ?? throw new ArgumentNullException(nameof(settingsViewModelFactory));
 
             if (_statusService is INotifyPropertyChanged notifier)
             {
                 notifier.PropertyChanged += StatusService_PropertyChanged;
             }
 
-            OpenSettingsCommand = new RelayCommand(_ => OpenSettingsWindow());
+            OpenSettingsCommand = new RelayCommand(ExecuteOpenSettingsWindow);
 
             _logger.Information("MainViewModel geïnitialiseerd.");
             _statusService.SetStatus(ApplicationStatus.Idle, "Applicatie succesvol geladen.");
@@ -84,178 +122,168 @@ namespace Data_Logger.ViewModels
             LoadTabsFromSettings();
         }
 
-        private void OpenSettingsWindow()
+        private void ExecuteOpenSettingsWindow(object obj)
         {
-            _logger.Information("Instellingenvenster wordt geopend...");
-            _statusService.SetStatus(ApplicationStatus.Idle, "Instellingen openen...");
-
-            var settingsView = new Views.SettingsView();
-            Action closeAction = () => settingsView.Close();
-            var settingsVm = _settingsViewModelFactory(closeAction);
-            settingsView.DataContext = settingsVm;
-
-            if (
-                Application.Current.MainWindow != null
-                && Application.Current.MainWindow != settingsView
-            )
+            _logger.Information(
+                "OpenSettingsCommand uitgevoerd. Instellingenvenster wordt geopend."
+            );
+            try
             {
+                var settingsView = new SettingsView();
+
+                Action closeAction = () =>
+                {
+                    _logger.Debug(
+                        "CloseAction aangeroepen vanuit SettingsViewModel. SettingsView wordt gesloten."
+                    );
+                    settingsView.Close();
+                };
+
+                var settingsViewModel = _settingsViewModelFactory(closeAction);
+                settingsView.DataContext = settingsViewModel;
+
                 settingsView.Owner = Application.Current.MainWindow;
+                settingsView.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+
+                settingsView.ShowDialog();
+
+                _logger.Information("Instellingenvenster gesloten.");
+
+                _logger.Information(
+                    "Tabs opnieuw laden na het sluiten van het instellingenvenster."
+                );
+                LoadTabsFromSettings();
             }
-
-            settingsView.ShowDialog();
-
-            _logger.Information("Instellingenvenster gesloten.");
-
-            UpdateTabsAfterSettingsChange();
-
-            _statusService.SetStatus(ApplicationStatus.Idle, "Klaar.");
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Fout bij het openen van het instellingenvenster.");
+                MessageBox.Show(
+                    $"Er is een fout opgetreden bij het openen van de instellingen:\n{ex.Message}",
+                    "Fout Instellingen",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error
+                );
+            }
         }
 
-        private void UpdateTabsAfterSettingsChange()
+        /// <summary>
+        /// Laadt de tabbladen op basis van de verbindingen die zijn gedefinieerd in de huidige applicatie-instellingen.
+        /// Bestaande tabs worden eerst opgeruimd.
+        /// </summary>
+        private void LoadTabsFromSettings()
         {
-            _logger.Information("Tabs bijwerken na mogelijke instellingwijzigingen...");
+            _logger.Information("Tabs laden op basis van huidige instellingen...");
+            string currentSelectedTabNameBeforeReload = SelectedTab
+                ?.ConnectionConfiguration
+                ?.ConnectionName;
 
-            var newConfigsFromSettings = _settingsService.CurrentSettings.Connections.ToList();
-            var currentActiveTabs = ActiveTabs.ToList();
-            var handledNewConfigs = new HashSet<ConnectionConfigBase>();
-
-            List<TabViewModelBase> tabsToRemove = new List<TabViewModelBase>();
-
-            foreach (var tabVm in currentActiveTabs)
+            foreach (var tab in ActiveTabs.ToList()) // ToList() om collectie te kunnen wijzigen tijdens iteratie
             {
-                ConnectionConfigBase oldTabConfig = tabVm.ConnectionConfiguration;
-                ConnectionConfigBase correspondingNewConfig = null;
-
-                if (oldTabConfig is OpcUaConnectionConfig oldOpcUa)
+                if (tab is IDisposable disposable)
                 {
-                    correspondingNewConfig = newConfigsFromSettings
-                        .OfType<OpcUaConnectionConfig>()
-                        .FirstOrDefault(newOpcUa =>
-                            newOpcUa.IsEnabled
-                            && oldOpcUa.EndpointUrl == newOpcUa.EndpointUrl
-                            && oldOpcUa.SecurityMode == newOpcUa.SecurityMode
-                            && oldOpcUa.SecurityPolicyUri == newOpcUa.SecurityPolicyUri
-                            && oldOpcUa.UserName == newOpcUa.UserName
-                        );
+                    disposable.Dispose();
                 }
-                else if (oldTabConfig is ModbusTcpConnectionConfig oldModbus)
-                {
-                    correspondingNewConfig = newConfigsFromSettings
-                        .OfType<ModbusTcpConnectionConfig>()
-                        .FirstOrDefault(newModbus =>
-                            newModbus.IsEnabled
-                            && oldModbus.IpAddress == newModbus.IpAddress
-                            && oldModbus.Port == newModbus.Port
-                            && oldModbus.UnitId == newModbus.UnitId
-                        );
-                }
+                ActiveTabs.Remove(tab);
+            }
+            _logger.Debug("Alle bestaande actieve tabs zijn opgeruimd.");
 
-                if (correspondingNewConfig != null && correspondingNewConfig.IsEnabled)
-                {
-                    _logger.Information(
-                        "Bestaande tab voor (oude naam) '{OldName}' wordt bijgewerkt met configuratie (nieuwe naam) '{NewName}'.",
-                        oldTabConfig.ConnectionName,
-                        correspondingNewConfig.ConnectionName
-                    );
+            if (_settingsService.CurrentSettings?.Connections == null)
+            {
+                _logger.Warning(
+                    "Geen verbindingen gevonden in de instellingen om tabs voor te laden."
+                );
+                SelectedTab = null;
+                return;
+            }
 
-                    if (
-                        tabVm is OpcUaTabViewModel opcUaTabVm
-                        && correspondingNewConfig is OpcUaConnectionConfig newOpcConf
-                    )
-                    {
-                        opcUaTabVm.UpdateConfiguration(newOpcConf);
-                    }
-                    else if (
-                        tabVm is ModbusTabViewModel modbusTabVm
-                        && correspondingNewConfig is ModbusTcpConnectionConfig newModConf
-                    )
-                    {
-                        modbusTabVm.UpdateConfiguration(newModConf);
-                    }
-                    handledNewConfigs.Add(correspondingNewConfig);
+            foreach (var config in _settingsService.CurrentSettings.Connections)
+            {
+                if (config.IsEnabled) // Alleen actieve verbindingen als tab laden
+                {
+                    CreateAndAddTab(config);
                 }
                 else
                 {
-                    _logger.Information(
-                        "Geen actieve overeenkomstige nieuwe configuratie gevonden voor tab: {ConnectionName}. Tab wordt verwijderd.",
-                        oldTabConfig.ConnectionName
+                    _logger.Debug(
+                        "Verbinding '{ConnectionName}' is uitgeschakeld en wordt niet als tab geladen.",
+                        config.ConnectionName
                     );
-                    tabsToRemove.Add(tabVm);
                 }
             }
 
-            foreach (var tabVmToRemove in tabsToRemove)
+            // Probeer de eerder geselecteerde tab opnieuw te selecteren
+            if (!string.IsNullOrEmpty(currentSelectedTabNameBeforeReload))
             {
-                if (tabVmToRemove is IDisposable disposable)
-                    disposable.Dispose();
-                ActiveTabs.Remove(tabVmToRemove);
-            }
-
-            foreach (
-                var newConfig in newConfigsFromSettings.Where(nc =>
-                    nc.IsEnabled && !handledNewConfigs.Contains(nc)
-                )
-            )
-            {
-                _logger.Information(
-                    "Nieuwe actieve verbinding gevonden, tab aanmaken voor: {ConnectionName}",
-                    newConfig.ConnectionName
+                SelectedTab = ActiveTabs.FirstOrDefault(t =>
+                    t.ConnectionConfiguration.ConnectionName == currentSelectedTabNameBeforeReload
                 );
-                CreateAndAddTab(newConfig);
             }
 
-            if (ActiveTabs.Any() && SelectedTab == null)
+            // Als er geen (of geen geldige vorige) selectie is, selecteer de eerste tab indien beschikbaar.
+            if (SelectedTab == null && ActiveTabs.Any())
+            {
                 SelectedTab = ActiveTabs.First();
+            }
             else if (!ActiveTabs.Any())
-                SelectedTab = null;
-            else if (SelectedTab != null && !ActiveTabs.Contains(SelectedTab))
-                SelectedTab = ActiveTabs.FirstOrDefault();
+            {
+                SelectedTab = null; // Geen tabs om te selecteren
+            }
+            _logger.Information("{Count} actieve tabs geladen.", ActiveTabs.Count);
         }
 
+        /// <summary>
+        /// Creëert en voegt een nieuwe tab ViewModel toe aan de <see cref="ActiveTabs"/> collectie
+        /// op basis van de gegeven verbindingsconfiguratie.
+        /// </summary>
+        /// <param name="config">De <see cref="ConnectionConfigBase"/> voor de nieuwe tab.</param>
         private void CreateAndAddTab(ConnectionConfigBase config)
         {
             TabViewModelBase tabVm = null;
-            if (config is ModbusTcpConnectionConfig modbusConfig)
+            switch (config.Type)
             {
-                if (_modbusServiceFactory != null && _dataLoggingService != null)
-                {
-                    var modbusServiceInstance = _modbusServiceFactory(modbusConfig);
-                    tabVm = new ModbusTabViewModel(
-                        modbusConfig,
-                        _logger,
-                        modbusServiceInstance,
-                        _statusService,
-                        _dataLoggingService,
-                        _settingsService
+                case ConnectionType.ModbusTcp:
+                    if (config is ModbusTcpConnectionConfig modbusConfig)
+                    {
+                        var modbusServiceInstance = _modbusServiceFactory(modbusConfig);
+                        tabVm = new ModbusTabViewModel(
+                            modbusConfig,
+                            _logger,
+                            modbusServiceInstance,
+                            _statusService,
+                            _dataLoggingService,
+                            _settingsService
+                        );
+                        _logger.Debug(
+                            "Modbus TCP Tab ViewModel aangemaakt voor: {ConnectionName}",
+                            modbusConfig.ConnectionName
+                        );
+                    }
+                    break;
+                case ConnectionType.OpcUa:
+                    if (config is OpcUaConnectionConfig opcUaConfig)
+                    {
+                        var opcUaServiceInstance = _opcUaServiceFactory(opcUaConfig);
+                        tabVm = new OpcUaTabViewModel(
+                            opcUaConfig,
+                            _logger,
+                            opcUaServiceInstance,
+                            _statusService,
+                            _dataLoggingService,
+                            _settingsService
+                        );
+                        _logger.Debug(
+                            "OPC UA Tab ViewModel aangemaakt voor: {ConnectionName}",
+                            opcUaConfig.ConnectionName
+                        );
+                    }
+                    break;
+                default:
+                    _logger.Warning(
+                        "Onbekend verbindingstype '{ConfigType}' overgeslagen bij aanmaken tab voor: {ConnectionName}",
+                        config.Type,
+                        config.ConnectionName
                     );
-                }
-                else
-                {
-                    _logger.Error(
-                        "Modbus service factory of data logging service niet geïnjecteerd. Kan ModbusTabViewModel niet aanmaken."
-                    );
-                }
-            }
-            else if (config is OpcUaConnectionConfig opcUaConfig)
-            {
-                if (_opcUaServiceFactory != null && _dataLoggingService != null)
-                {
-                    var opcUaServiceInstance = _opcUaServiceFactory(opcUaConfig);
-                    tabVm = new OpcUaTabViewModel(
-                        opcUaConfig,
-                        _logger,
-                        opcUaServiceInstance,
-                        _statusService,
-                        _dataLoggingService,
-                        _settingsService
-                    );
-                }
-                else
-                {
-                    _logger.Error(
-                        "OPC UA service factory of data logging service niet geïnjecteerd. Kan OpcUaTabViewModel niet aanmaken."
-                    );
-                }
+                    break;
             }
 
             if (tabVm != null)
@@ -269,132 +297,10 @@ namespace Data_Logger.ViewModels
             }
         }
 
-        private void LoadTabsFromSettings()
-        {
-            _logger.Information("Tabs laden op basis van huidige instellingen...");
-            var currentSelectedTabName = SelectedTab?.ConnectionConfiguration?.ConnectionName;
-            var currentTabs = ActiveTabs.ToList();
-
-            foreach (var tab in currentTabs)
-            {
-                if (tab is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
-                ActiveTabs.Remove(tab);
-            }
-
-            if (_settingsService.CurrentSettings?.Connections == null)
-            {
-                _logger.Warning(
-                    "Geen verbindingen gevonden in de instellingen om tabs voor te laden."
-                );
-                SelectedTab = null;
-                return;
-            }
-
-            foreach (var config in _settingsService.CurrentSettings.Connections)
-            {
-                if (config.IsEnabled)
-                {
-                    TabViewModelBase tabVm = null;
-                    switch (config.Type)
-                    {
-                        case ConnectionType.ModbusTcp:
-                            if (
-                                config is ModbusTcpConnectionConfig modbusConfig
-                                && _modbusServiceFactory != null
-                            )
-                            {
-                                var modbusServiceInstance = _modbusServiceFactory(modbusConfig);
-                                tabVm = new ModbusTabViewModel(
-                                    modbusConfig,
-                                    _logger,
-                                    modbusServiceInstance,
-                                    _statusService,
-                                    _dataLoggingService,
-                                    _settingsService
-                                );
-                                _logger.Debug(
-                                    "Modbus TCP Tab ViewModel aangemaakt voor: {ConnectionName}",
-                                    modbusConfig.ConnectionName
-                                );
-                            }
-                            else if (_modbusServiceFactory == null)
-                            {
-                                _logger.Error(
-                                    "_modbusServiceFactory is niet geïnjecteerd in MainViewModel."
-                                );
-                            }
-                            break;
-                        case ConnectionType.OpcUa:
-                            if (
-                                config is OpcUaConnectionConfig opcUaConfig
-                                && _opcUaServiceFactory != null
-                            )
-                            {
-                                var opcUaServiceInstance = _opcUaServiceFactory(opcUaConfig);
-                                tabVm = new OpcUaTabViewModel(
-                                    opcUaConfig,
-                                    _logger,
-                                    opcUaServiceInstance,
-                                    _statusService,
-                                    _dataLoggingService,
-                                    _settingsService
-                                );
-                                _logger.Debug(
-                                    "OPC UA Tab ViewModel aangemaakt voor: {ConnectionName}",
-                                    opcUaConfig.ConnectionName
-                                );
-                            }
-                            else if (_opcUaServiceFactory == null)
-                            {
-                                _logger.Error(
-                                    "_opcUaServiceFactory is niet geïnjecteerd in MainViewModel."
-                                );
-                            }
-                            break;
-                        default:
-                            _logger.Warning(
-                                "Onbekend verbindingstype '{Type}' overgeslagen voor tab: {ConnectionName}",
-                                config.Type,
-                                config.ConnectionName
-                            );
-                            break;
-                    }
-
-                    if (tabVm != null)
-                    {
-                        ActiveTabs.Add(tabVm);
-                    }
-                }
-                else
-                {
-                    _logger.Debug(
-                        "Verbinding '{ConnectionName}' is uitgeschakeld en wordt niet als tab geladen.",
-                        config.ConnectionName
-                    );
-                }
-            }
-
-            if (!string.IsNullOrEmpty(currentSelectedTabName))
-            {
-                SelectedTab = ActiveTabs.FirstOrDefault(t =>
-                    t.ConnectionConfiguration.ConnectionName == currentSelectedTabName
-                );
-            }
-
-            if (SelectedTab == null && ActiveTabs.Any())
-            {
-                SelectedTab = ActiveTabs.First();
-            }
-            else if (!ActiveTabs.Any())
-            {
-                SelectedTab = null;
-            }
-            _logger.Information("{Count} actieve tabs geladen.", ActiveTabs.Count);
-        }
-
+        /// <summary>
+        /// Handler voor PropertyChanged events van de <see cref="IStatusService"/>.
+        /// Zorgt ervoor dat de UI wordt bijgewerkt wanneer de applicatiestatus of het bericht verandert.
+        /// </summary>
         private void StatusService_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(IStatusService.CurrentStatus))

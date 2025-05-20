@@ -11,18 +11,18 @@
     x:Class="Data_Logger.Views.SettingsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:System="clr-namespace:System;assembly=mscorlib"
+    xmlns:converters="clr-namespace:Data_Logger.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:enums="clr-namespace:Data_Logger.Enums"
+    xmlns:local="clr-namespace:Data_Logger.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:models="clr-namespace:Data_Logger.Models"
-    xmlns:vm="clr-namespace:Data_Logger.ViewModels"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="clr-namespace:Data_Logger.Views"
     xmlns:opcua="clr-namespace:Opc.Ua;assembly=Opc.Ua.Core"
-    xmlns:converters="clr-namespace:Data_Logger.Converters">
+    xmlns:vm="clr-namespace:Data_Logger.ViewModels"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Window.Resources>
-        <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
-        
+        <converters:InverseBooleanConverter x:Key="InverseBooleanConverter" />
+
         <ObjectDataProvider
             MethodName="GetValues"
             ObjectType="{x:Type System:Enum}"
@@ -40,85 +40,207 @@
                 <x:Type TypeName="enums:ModbusDataType" />
             </ObjectDataProvider.MethodParameters>
         </ObjectDataProvider>
-        
-        <ObjectDataProvider x:Key="OpcUaDataTypeEnumValues" MethodName="GetValues" ObjectType="{x:Type System:Enum}">
-            <ObjectDataProvider.MethodParameters>
-                <x:Type TypeName="enums:OpcUaDataType"/>
-            </ObjectDataProvider.MethodParameters>
-        </ObjectDataProvider>
-        
-        <ObjectDataProvider MethodName="GetValues"
-                            ObjectType="{x:Type System:Enum}"
-                            x:Key="MessageSecurityModeEnumValues">
+
+        <ObjectDataProvider
+            MethodName="GetValues"
+            ObjectType="{x:Type System:Enum}"
+            x:Key="MessageSecurityModeEnumValues">
             <ObjectDataProvider.MethodParameters>
                 <x:Type TypeName="opcua:MessageSecurityMode" />
             </ObjectDataProvider.MethodParameters>
         </ObjectDataProvider>
 
-        <ObjectDataProvider ObjectType="{x:Type local:OpcUaSecurityPolicyValues}"
-                            MethodName="GetInstance"
-                            x:Key="SecurityPolicyUriValues"/>
+        <ObjectDataProvider
+            MethodName="GetInstance"
+            ObjectType="{x:Type local:OpcUaSecurityPolicyValues}"
+            x:Key="SecurityPolicyUriValues" />
 
         <DataTemplate DataType="{x:Type models:OpcUaConnectionConfig}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="10">
-                    <TextBlock Text="OPC UA Verbinding Details" FontWeight="Bold" Margin="0,0,0,10"/>
+                    <TextBlock
+                        FontWeight="Bold"
+                        Margin="0,0,0,10"
+                        Text="OPC UA Verbinding Details" />
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="180"/> <ColumnDefinition Width="*"/>
+                            <ColumnDefinition MinWidth="180" Width="Auto" />
+                            <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/> <RowDefinition Height="Auto"/> <RowDefinition Height="Auto"/> <RowDefinition Height="Auto"/> <RowDefinition Height="Auto"/> <RowDefinition Height="Auto"/> <RowDefinition Height="Auto"/> <RowDefinition Height="Auto"/> </Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
-                        <Label Grid.Row="0" Grid.Column="0" Content="Naam:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding ConnectionName, UpdateSourceTrigger=PropertyChanged}" Margin="5"/>
+                        <Label
+                            Content="Naam:"
+                            Grid.Column="0"
+                            Grid.Row="0"
+                            VerticalAlignment="Center" />
+                        <TextBox
+                            Grid.Column="1"
+                            Grid.Row="0"
+                            Margin="5"
+                            Text="{Binding ConnectionName, UpdateSourceTrigger=PropertyChanged}" />
 
-                        <Label Grid.Row="1" Grid.Column="0" Content="Endpoint URL:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding EndpointUrl, UpdateSourceTrigger=PropertyChanged}" Margin="5"/>
+                        <Label
+                            Content="Endpoint URL:"
+                            Grid.Column="0"
+                            Grid.Row="1"
+                            VerticalAlignment="Center" />
+                        <TextBox
+                            Grid.Column="1"
+                            Grid.Row="1"
+                            Margin="5"
+                            Text="{Binding EndpointUrl, UpdateSourceTrigger=PropertyChanged}" />
 
-                        <Label Grid.Row="2" Grid.Column="0" Content="Security Mode:" VerticalAlignment="Center"/>
-                        <ComboBox Grid.Row="2" Grid.Column="1" Margin="5"
-                                  ItemsSource="{Binding Source={StaticResource MessageSecurityModeEnumValues}}"
-                                  SelectedValue="{Binding SecurityMode, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Label
+                            Content="Security Mode:"
+                            Grid.Column="0"
+                            Grid.Row="2"
+                            VerticalAlignment="Center" />
+                        <ComboBox
+                            Grid.Column="1"
+                            Grid.Row="2"
+                            ItemsSource="{Binding Source={StaticResource MessageSecurityModeEnumValues}}"
+                            Margin="5"
+                            SelectedValue="{Binding SecurityMode, UpdateSourceTrigger=PropertyChanged}" />
 
-                        <Label Grid.Row="3" Grid.Column="0" Content="Security Policy URI:" VerticalAlignment="Center"/>
-                        <ComboBox Grid.Row="3" Grid.Column="1" Margin="5"
-                                  ItemsSource="{Binding Source={StaticResource SecurityPolicyUriValues}}"
-                                  SelectedValue="{Binding SecurityPolicyUri, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Label
+                            Content="Security Policy URI:"
+                            Grid.Column="0"
+                            Grid.Row="3"
+                            VerticalAlignment="Center" />
+                        <ComboBox
+                            Grid.Column="1"
+                            Grid.Row="3"
+                            ItemsSource="{Binding Source={StaticResource SecurityPolicyUriValues}}"
+                            Margin="5"
+                            SelectedValue="{Binding SecurityPolicyUri, UpdateSourceTrigger=PropertyChanged}" />
 
-                        <Label Grid.Row="4" Grid.Column="0" Content="Gebruikersnaam:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" Margin="5"/>
+                        <Label
+                            Content="Gebruikersnaam:"
+                            Grid.Column="0"
+                            Grid.Row="4"
+                            VerticalAlignment="Center" />
+                        <TextBox
+                            Grid.Column="1"
+                            Grid.Row="4"
+                            Margin="5"
+                            Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" />
 
-                        <Label Grid.Row="5" Grid.Column="0" Content="Wachtwoord:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding Password, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" Margin="5"/>
+                        <Label
+                            Content="Wachtwoord:"
+                            Grid.Column="0"
+                            Grid.Row="5"
+                            VerticalAlignment="Center" />
+                        <TextBox
+                            Grid.Column="1"
+                            Grid.Row="5"
+                            Margin="5"
+                            Text="{Binding Password, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" />
 
-                        <Label Grid.Row="6" Grid.Column="0" Content="Scan Interval (sec):" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding ScanIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" Margin="5"/>
+                        <Label
+                            Content="Scan Interval (sec):"
+                            Grid.Column="0"
+                            Grid.Row="6"
+                            VerticalAlignment="Center" />
+                        <TextBox
+                            Grid.Column="1"
+                            Grid.Row="6"
+                            Margin="5"
+                            Text="{Binding ScanIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" />
 
-                        <CheckBox Grid.Row="7" Grid.Column="1" IsChecked="{Binding IsEnabled}" Content="Actief" Margin="5" VerticalAlignment="Center"/>
+                        <CheckBox
+                            Content="Actief"
+                            Grid.Column="1"
+                            Grid.Row="7"
+                            IsChecked="{Binding IsEnabled}"
+                            Margin="5"
+                            VerticalAlignment="Center" />
                     </Grid>
 
-                    <GroupBox Header="Tags en Alarmen (OPC UA)" Margin="0,15,0,0" Padding="5">
+                    <GroupBox
+                        Header="Tags en Alarmen (OPC UA)"
+                        Margin="0,15,0,0"
+                        Padding="5">
                         <StackPanel>
-                            <TextBlock Text="Gemonitorde OPC UA Tags (alarmen en outlier detectie hier instellen):" Margin="0,0,0,5" FontStyle="Italic" TextWrapping="Wrap"/>
-                            <DataGrid ItemsSource="{Binding TagsToMonitor}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" MaxHeight="300" VerticalScrollBarVisibility="Auto">
+                            <TextBlock
+                                FontStyle="Italic"
+                                Margin="0,0,0,5"
+                                Text="Gemonitorde OPC UA Tags (alarmen en outlier detectie hier instellen):"
+                                TextWrapping="Wrap" />
+                            <DataGrid
+                                AutoGenerateColumns="False"
+                                CanUserAddRows="False"
+                                CanUserDeleteRows="False"
+                                ItemsSource="{Binding TagsToMonitor}"
+                                MaxHeight="300"
+                                VerticalScrollBarVisibility="Auto">
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Tag Naam" Binding="{Binding TagName}" Width="1.2*" IsReadOnly="True"/>
-                                    <DataGridTextColumn Header="NodeID" Binding="{Binding NodeId}" Width="1.5*" IsReadOnly="True"/>
-                                    <DataGridTextColumn Header="Sampling (ms)" Binding="{Binding SamplingInterval, UpdateSourceTrigger=LostFocus}" Width="Auto"/>
-                                    <DataGridCheckBoxColumn Header="Tag Actief?" Binding="{Binding IsActive, UpdateSourceTrigger=PropertyChanged}" Width="Auto"/>
-                                    
-                                    <DataGridCheckBoxColumn Header="Drempel Alarm?" Binding="{Binding IsAlarmingEnabled, UpdateSourceTrigger=PropertyChanged}" Width="Auto"/>
-                                    <DataGridTextColumn Header="HH Lim." Binding="{Binding HighHighLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}" Width="0.6*"/>
-                                    <DataGridTextColumn Header="H Lim." Binding="{Binding HighLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}" Width="0.6*"/>
-                                    <DataGridTextColumn Header="L Lim." Binding="{Binding LowLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}" Width="0.6*"/>
-                                    <DataGridTextColumn Header="LL Lim." Binding="{Binding LowLowLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}" Width="0.6*"/>
-                                    
-                                    <DataGridCheckBoxColumn Header="Outlier Detectie?" Binding="{Binding IsOutlierDetectionEnabled, UpdateSourceTrigger=PropertyChanged}" Width="Auto"/>
-                                    <DataGridTextColumn Header="Baseline N" Binding="{Binding BaselineSampleSize, UpdateSourceTrigger=LostFocus, TargetNullValue='20'}" Width="0.7*"/>
-                                    <DataGridTextColumn Header="StdDev Factor" Binding="{Binding OutlierStandardDeviationFactor, UpdateSourceTrigger=LostFocus, TargetNullValue='3.0'}" Width="0.8*"/>
-                                    
-                                    <DataGridTextColumn Header="Alarm Bericht Format" Binding="{Binding AlarmMessageFormat, UpdateSourceTrigger=LostFocus}" Width="2*"/>
+                                    <DataGridTextColumn
+                                        Binding="{Binding TagName}"
+                                        Header="Tag Naam"
+                                        IsReadOnly="True"
+                                        Width="1.2*" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding NodeId}"
+                                        Header="NodeID"
+                                        IsReadOnly="True"
+                                        Width="1.5*" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding SamplingInterval, UpdateSourceTrigger=LostFocus}"
+                                        Header="Sampling (ms)"
+                                        Width="Auto" />
+                                    <DataGridCheckBoxColumn
+                                        Binding="{Binding IsActive, UpdateSourceTrigger=PropertyChanged}"
+                                        Header="Tag Actief?"
+                                        Width="Auto" />
+
+                                    <DataGridCheckBoxColumn
+                                        Binding="{Binding IsAlarmingEnabled, UpdateSourceTrigger=PropertyChanged}"
+                                        Header="Drempel Alarm?"
+                                        Width="Auto" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding HighHighLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}"
+                                        Header="HH Lim."
+                                        Width="0.6*" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding HighLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}"
+                                        Header="H Lim."
+                                        Width="0.6*" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding LowLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}"
+                                        Header="L Lim."
+                                        Width="0.6*" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding LowLowLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}"
+                                        Header="LL Lim."
+                                        Width="0.6*" />
+
+                                    <DataGridCheckBoxColumn
+                                        Binding="{Binding IsOutlierDetectionEnabled, UpdateSourceTrigger=PropertyChanged}"
+                                        Header="Outlier Detectie?"
+                                        Width="Auto" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding BaselineSampleSize, UpdateSourceTrigger=LostFocus, TargetNullValue='20'}"
+                                        Header="Baseline N"
+                                        Width="0.7*" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding OutlierStandardDeviationFactor, UpdateSourceTrigger=LostFocus, TargetNullValue='3.0'}"
+                                        Header="StdDev Factor"
+                                        Width="0.8*" />
+
+                                    <DataGridTextColumn
+                                        Binding="{Binding AlarmMessageFormat, UpdateSourceTrigger=LostFocus}"
+                                        Header="Alarm Bericht Format"
+                                        Width="2*" />
                                 </DataGrid.Columns>
                             </DataGrid>
                         </StackPanel>
@@ -130,54 +252,169 @@
         <DataTemplate DataType="{x:Type models:ModbusTcpConnectionConfig}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="10">
-                    <TextBlock Text="Modbus TCP Verbinding Details" FontWeight="Bold" Margin="0,0,0,10" />
+                    <TextBlock
+                        FontWeight="Bold"
+                        Margin="0,0,0,10"
+                        Text="Modbus TCP Verbinding Details" />
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition MinWidth="150" Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" /> <RowDefinition Height="Auto" /> <RowDefinition Height="Auto" /> <RowDefinition Height="Auto" /> <RowDefinition Height="Auto" /> <RowDefinition Height="Auto" /> </Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
-                        <Label Grid.Row="0" Grid.Column="0" Content="Naam:" VerticalAlignment="Center" />
-                        <TextBox Grid.Row="0" Grid.Column="1" Margin="5" Text="{Binding ConnectionName, UpdateSourceTrigger=PropertyChanged}" />
+                        <Label
+                            Content="Naam:"
+                            Grid.Column="0"
+                            Grid.Row="0"
+                            VerticalAlignment="Center" />
+                        <TextBox
+                            Grid.Column="1"
+                            Grid.Row="0"
+                            Margin="5"
+                            Text="{Binding ConnectionName, UpdateSourceTrigger=PropertyChanged}" />
 
-                        <Label Grid.Row="1" Grid.Column="0" Content="IP Adres:" VerticalAlignment="Center" />
-                        <TextBox Grid.Row="1" Grid.Column="1" Margin="5" Text="{Binding IpAddress, UpdateSourceTrigger=PropertyChanged}" />
+                        <Label
+                            Content="IP Adres:"
+                            Grid.Column="0"
+                            Grid.Row="1"
+                            VerticalAlignment="Center" />
+                        <TextBox
+                            Grid.Column="1"
+                            Grid.Row="1"
+                            Margin="5"
+                            Text="{Binding IpAddress, UpdateSourceTrigger=PropertyChanged}" />
 
-                        <Label Grid.Row="2" Grid.Column="0" Content="Poort:" VerticalAlignment="Center" />
-                        <TextBox Grid.Row="2" Grid.Column="1" Margin="5" Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}" />
+                        <Label
+                            Content="Poort:"
+                            Grid.Column="0"
+                            Grid.Row="2"
+                            VerticalAlignment="Center" />
+                        <TextBox
+                            Grid.Column="1"
+                            Grid.Row="2"
+                            Margin="5"
+                            Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}" />
 
-                        <Label Grid.Row="3" Grid.Column="0" Content="Unit ID:" VerticalAlignment="Center" />
-                        <TextBox Grid.Row="3" Grid.Column="1" Margin="5" Text="{Binding UnitId, UpdateSourceTrigger=PropertyChanged}" />
+                        <Label
+                            Content="Unit ID:"
+                            Grid.Column="0"
+                            Grid.Row="3"
+                            VerticalAlignment="Center" />
+                        <TextBox
+                            Grid.Column="1"
+                            Grid.Row="3"
+                            Margin="5"
+                            Text="{Binding UnitId, UpdateSourceTrigger=PropertyChanged}" />
 
-                        <Label Grid.Row="4" Grid.Column="0" Content="Scan Interval (sec):" VerticalAlignment="Center" />
-                        <TextBox Grid.Row="4" Grid.Column="1" Margin="5" Text="{Binding ScanIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" />
+                        <Label
+                            Content="Scan Interval (sec):"
+                            Grid.Column="0"
+                            Grid.Row="4"
+                            VerticalAlignment="Center" />
+                        <TextBox
+                            Grid.Column="1"
+                            Grid.Row="4"
+                            Margin="5"
+                            Text="{Binding ScanIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" />
 
-                        <CheckBox Grid.Row="5" Grid.Column="1" Content="Actief" IsChecked="{Binding IsEnabled}" Margin="5" VerticalAlignment="Center" />
+                        <CheckBox
+                            Content="Actief"
+                            Grid.Column="1"
+                            Grid.Row="5"
+                            IsChecked="{Binding IsEnabled}"
+                            Margin="5"
+                            VerticalAlignment="Center" />
                     </Grid>
 
-                    <GroupBox Header="Tags Alarmen (Modbus)" Margin="0,15,0,0" Padding="5">
+                    <GroupBox
+                        Header="Tags Alarmen (Modbus)"
+                        Margin="0,15,0,0"
+                        Padding="5">
                         <StackPanel>
-                            <TextBlock Text="Gemonitorde Modbus Tags (alarmen en outlier detectie hier instellen):" Margin="0,0,0,5" FontStyle="Italic" TextWrapping="Wrap"/>
-                            <DataGrid ItemsSource="{Binding TagsToMonitor}" AutoGenerateColumns="False" CanUserAddRows="True" CanUserDeleteRows="True" MaxHeight="300" VerticalScrollBarVisibility="Auto"
-                                      AddingNewItem="DataGrid_AddingNewItem_ModbusTag"> <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Tag Naam" Binding="{Binding TagName, UpdateSourceTrigger=PropertyChanged}" Width="1.2*"/>                                    <DataGridTextColumn Header="Adres" Binding="{Binding Address, UpdateSourceTrigger=LostFocus}" Width="Auto"/>
-                                    <DataGridComboBoxColumn Header="Register Type" SelectedValueBinding="{Binding RegisterType}" ItemsSource="{Binding Source={StaticResource ModbusRegisterTypeEnumValues}}" Width="*"/>
-                                    <DataGridComboBoxColumn Header="Data Type" SelectedValueBinding="{Binding DataType}" ItemsSource="{Binding Source={StaticResource ModbusDataTypeEnumValues}}" IsReadOnly="{Binding IsDataTypeSelectionEnabled, Converter={StaticResource InverseBooleanConverter}}" Width="*"/>
-                                    <DataGridCheckBoxColumn Header="Tag Actief?" Binding="{Binding IsActive, UpdateSourceTrigger=PropertyChanged}" Width="Auto"/>
+                            <TextBlock
+                                FontStyle="Italic"
+                                Margin="0,0,0,5"
+                                Text="Gemonitorde Modbus Tags (alarmen en outlier detectie hier instellen):"
+                                TextWrapping="Wrap" />
+                            <DataGrid
+                                AddingNewItem="DataGrid_AddingNewItem_ModbusTag"
+                                AutoGenerateColumns="False"
+                                CanUserAddRows="True"
+                                CanUserDeleteRows="True"
+                                ItemsSource="{Binding TagsToMonitor}"
+                                MaxHeight="300"
+                                VerticalScrollBarVisibility="Auto">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn
+                                        Binding="{Binding TagName, UpdateSourceTrigger=PropertyChanged}"
+                                        Header="Tag Naam"
+                                        Width="1.2*" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding Address, UpdateSourceTrigger=LostFocus}"
+                                        Header="Adres"
+                                        Width="Auto" />
+                                    <DataGridComboBoxColumn
+                                        Header="Register Type"
+                                        ItemsSource="{Binding Source={StaticResource ModbusRegisterTypeEnumValues}}"
+                                        SelectedValueBinding="{Binding RegisterType}"
+                                        Width="*" />
+                                    <DataGridComboBoxColumn
+                                        Header="Data Type"
+                                        IsReadOnly="{Binding IsDataTypeSelectionEnabled, Converter={StaticResource InverseBooleanConverter}}"
+                                        ItemsSource="{Binding Source={StaticResource ModbusDataTypeEnumValues}}"
+                                        SelectedValueBinding="{Binding DataType}"
+                                        Width="*" />
+                                    <DataGridCheckBoxColumn
+                                        Binding="{Binding IsActive, UpdateSourceTrigger=PropertyChanged}"
+                                        Header="Tag Actief?"
+                                        Width="Auto" />
 
-                                    <DataGridCheckBoxColumn Header="Drempel Alarm?" Binding="{Binding IsAlarmingEnabled, UpdateSourceTrigger=PropertyChanged}" Width="Auto"/>
-                                    <DataGridTextColumn Header="HH Lim." Binding="{Binding HighHighLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}" Width="0.6*"/>
-                                    <DataGridTextColumn Header="H Lim." Binding="{Binding HighLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}" Width="0.6*"/>
-                                    <DataGridTextColumn Header="L Lim." Binding="{Binding LowLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}" Width="0.6*"/>
-                                    <DataGridTextColumn Header="LL Lim." Binding="{Binding LowLowLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}" Width="0.6*"/>
+                                    <DataGridCheckBoxColumn
+                                        Binding="{Binding IsAlarmingEnabled, UpdateSourceTrigger=PropertyChanged}"
+                                        Header="Drempel Alarm?"
+                                        Width="Auto" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding HighHighLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}"
+                                        Header="HH Lim."
+                                        Width="0.6*" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding HighLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}"
+                                        Header="H Lim."
+                                        Width="0.6*" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding LowLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}"
+                                        Header="L Lim."
+                                        Width="0.6*" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding LowLowLimit, UpdateSourceTrigger=LostFocus, TargetNullValue=''}"
+                                        Header="LL Lim."
+                                        Width="0.6*" />
 
-                                    <DataGridCheckBoxColumn Header="Outlier Detectie?" Binding="{Binding IsOutlierDetectionEnabled, UpdateSourceTrigger=PropertyChanged}" Width="Auto"/>
-                                    <DataGridTextColumn Header="Baseline N" Binding="{Binding BaselineSampleSize, UpdateSourceTrigger=LostFocus, TargetNullValue='20'}" Width="0.7*"/>
-                                    <DataGridTextColumn Header="StdDev Factor" Binding="{Binding OutlierStandardDeviationFactor, UpdateSourceTrigger=LostFocus, TargetNullValue='3.0'}" Width="0.8*"/>
-                                    
-                                    <DataGridTextColumn Header="Alarm Bericht Format" Binding="{Binding AlarmMessageFormat, UpdateSourceTrigger=LostFocus}" Width="2*"/>
+                                    <DataGridCheckBoxColumn
+                                        Binding="{Binding IsOutlierDetectionEnabled, UpdateSourceTrigger=PropertyChanged}"
+                                        Header="Outlier Detectie?"
+                                        Width="Auto" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding BaselineSampleSize, UpdateSourceTrigger=LostFocus, TargetNullValue='20'}"
+                                        Header="Baseline N"
+                                        Width="0.7*" />
+                                    <DataGridTextColumn
+                                        Binding="{Binding OutlierStandardDeviationFactor, UpdateSourceTrigger=LostFocus, TargetNullValue='3.0'}"
+                                        Header="StdDev Factor"
+                                        Width="0.8*" />
+
+                                    <DataGridTextColumn
+                                        Binding="{Binding AlarmMessageFormat, UpdateSourceTrigger=LostFocus}"
+                                        Header="Alarm Bericht Format"
+                                        Width="2*" />
                                 </DataGrid.Columns>
                             </DataGrid>
                         </StackPanel>

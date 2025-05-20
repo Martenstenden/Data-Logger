@@ -4,17 +4,16 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Threading;
 using System.Threading.Tasks;
 using Data_Logger.DLUtils;
 using Data_Logger.Models;
 using Data_Logger.Services.Abstractions;
 using Data_Logger.Services.Implementations;
-using Moq;
 using NUnit.Framework;
 using NUnit.Framework.Legacy;
 using Opc.Ua;
-using Opc.Ua.Configuration;
 using Serilog;
 
 namespace DataLogger.Tests.IntegrationTests
@@ -29,9 +28,10 @@ namespace DataLogger.Tests.IntegrationTests
         private const string DefaultLocalOpcUaEndpoint =
             "opc.tcp://localhost:62541/Quickstarts/ReferenceServer";
         private string _currentOpcUaEndpoint;
-
-        private ILogger _testLogger;
+        
         private ApplicationConfiguration _clientAppConfigForTest;
+        private ILogger _testLogger;
+
         private static bool _isCiEnvironment;
 
         static OpcUaServiceIntegrationTests()
@@ -42,6 +42,12 @@ namespace DataLogger.Tests.IntegrationTests
         [OneTimeSetUp]
         public void GlobalSetup()
         {
+            _testLogger = new LoggerConfiguration()
+                .MinimumLevel.Verbose() // Of een ander gewenst niveau
+                .WriteTo.Console()
+                // .WriteTo.File("logs/DataLogger_IntegrationTests_.txt", rollingInterval: RollingInterval.Day) // Optioneel: loggen naar een bestand
+                .CreateLogger();
+            
             if (_isCiEnvironment)
             {
                 TestContext.Progress.WriteLine(
@@ -112,7 +118,7 @@ namespace DataLogger.Tests.IntegrationTests
                         TimeSpan.FromSeconds(10),
                         true
                     );
-                    ClassicAssert.Fail(
+                    Assert.Fail(
                         $"Lokaal: Kon DockerTestHelper OPC UA server ({DockerTestHelper.DockerContainerName}) niet starten. Controleer Docker logs en setup."
                     );
                 }
@@ -168,13 +174,12 @@ namespace DataLogger.Tests.IntegrationTests
                 autoAcceptUntrustedCertificates: true,
                 addAppCertToTrustedStore: true,
                 createClientCertificateIfNeeded: true,
-                certificateKeySize: 2048,
-                certificateLifetimeInMonths: 1
+                logger: null
             );
 
             if (_clientAppConfigForTest == null)
             {
-                ClassicAssert.Fail(
+                Assert.Fail(
                     "PerTestSetup: _clientAppConfigForTest is NULL na aanroep CreateClientConfiguration!"
                 );
             }
@@ -244,7 +249,7 @@ namespace DataLogger.Tests.IntegrationTests
             }
             catch (Exception ex)
             {
-                ClassicAssert.Fail(
+                Assert.Fail(
                     $"ConnectAsync gooide een exception: {ex.Message} - {ex.StackTrace}"
                 );
             }
@@ -282,7 +287,7 @@ namespace DataLogger.Tests.IntegrationTests
             }
             catch (Exception ex)
             {
-                ClassicAssert.Fail(
+                Assert.Fail(
                     $"BrowseRootAsync gooide een exception: {ex.Message} - {ex.StackTrace}"
                 );
             }
@@ -420,7 +425,7 @@ namespace DataLogger.Tests.IntegrationTests
         {
             if (_isCiEnvironment)
             {
-                ClassicAssert.Ignore("Deze test is alleen voor lokaal gebruik met Docker.");
+                Assert.Ignore("Deze test is alleen voor lokaal gebruik met Docker.");
             }
 
             TestContext.Progress.WriteLine(
@@ -457,8 +462,7 @@ namespace DataLogger.Tests.IntegrationTests
                 $"Lokaal: Container {DockerTestHelper.DockerContainerName} gestart."
             );
 
-            bool portInUse = System
-                .Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties()
+            bool portInUse = IPGlobalProperties.GetIPGlobalProperties()
                 .GetActiveTcpListeners()
                 .Any(p => p.Port == 62541);
             ClassicAssert.IsTrue(
@@ -475,8 +479,7 @@ namespace DataLogger.Tests.IntegrationTests
             );
 
             Thread.Sleep(2000);
-            portInUse = System
-                .Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties()
+            portInUse = IPGlobalProperties.GetIPGlobalProperties()
                 .GetActiveTcpListeners()
                 .Any(p => p.Port == 62541);
             ClassicAssert.IsFalse(

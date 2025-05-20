@@ -187,6 +187,7 @@
         <Compile Include="Converters\CountToEnabledConverter.cs" />
         <Compile Include="Converters\InverseBooleanConverter.cs" />
         <Compile Include="Converters\ModbusDataConverter.cs" />
+        <Compile Include="Converters\NullToBooleanConverter.cs" />
         <Compile Include="Converters\StringNotEmptyToBooleanConverter.cs" />
         <Compile Include="Core\ObservableObject.cs" />
         <Compile Include="Core\RelayCommand.cs" />
@@ -223,7 +224,12 @@
         <Compile Include="Services\Implementations\DataLoggingService.cs" />
         <Compile Include="Services\Implementations\LoggingHostService.cs" />
         <Compile Include="Services\Implementations\ModbusService.cs" />
+        <Compile Include="Services\Implementations\OpcUaService.Browse.cs" />
+        <Compile Include="Services\Implementations\OpcUaService.Connection.cs" />
         <Compile Include="Services\Implementations\OpcUaService.cs" />
+        <Compile Include="Services\Implementations\OpcUaService.DataAccess.cs" />
+        <Compile Include="Services\Implementations\OpcUaService.Helpers.cs" />
+        <Compile Include="Services\Implementations\OpcUaService.Subscription.cs" />
         <Compile Include="Services\Implementations\SettingsService.cs" />
         <Compile Include="Services\Implementations\StatusService.cs" />
         <Compile Include="Services\UiLogSink.cs" />

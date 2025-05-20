@@ -6,7 +6,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
-using Data_Logger;
 using Data_Logger.Core;
 using Data_Logger.Enums;
 using Data_Logger.Models;
@@ -16,55 +15,96 @@ using Serilog;
 
 namespace Data_Logger.ViewModels
 {
-    public class OpcUaTabViewModel : TabViewModelBase, IDisposable
+    /// <summary>
+    /// ViewModel voor een tabblad dat een OPC UA connectie representeert.
+    /// Beheert de connectiestatus, browsen van de OPC UA adresruimte, tag-configuratie,
+    /// live data monitoring, alarmering, outlier detectie, en plotting.
+    /// Implementeert <see cref="IDisposable"/> voor het correct vrijgeven van resources.
+    /// </summary>
+    public sealed class OpcUaTabViewModel : TabViewModelBase, IDisposable
     {
-        #region Fields
-        private readonly ILogger _logger;
+        #region Readonly Fields
+        private readonly ILogger _specificLogger; // Logger specifiek voor deze ViewModel instantie
         private readonly IOpcUaService _opcUaService;
         private readonly IStatusService _statusService;
         private readonly IDataLoggingService _dataLoggingService;
         private readonly ISettingsService _settingsService;
+        #endregion
 
-        private bool _isBrowseAddressSpace = false;
+        #region Fields
+        private bool _isBrowseAddressSpaceProcessing; // Vlag om aan te geven of het browsen bezig is
         private OpcUaNodeViewModel _selectedOpcUaNodeInTree;
         private string _lastReadNodeValueMessage = "Nog geen waarde gelezen.";
-        private bool _isLoadingNodeDetails = false;
-        private bool _disposedValue;
-
+        private bool _isLoadingNodeDetails;
+        private bool _disposedValue; // Voor IDisposable patroon
         private PlotTabViewModel _selectedPlotTab;
         #endregion
 
         #region Properties
+        /// <summary>
+        /// Haalt de sterk getypeerde OPC UA connectieconfiguratie op.
+        /// </summary>
         public OpcUaConnectionConfig OpcUaConfig =>
             ConnectionConfiguration as OpcUaConnectionConfig;
+
+        /// <summary>
+        /// Haalt een waarde op die aangeeft of de OPC UA service momenteel verbonden is.
+        /// </summary>
         public bool IsConnected => _opcUaService?.IsConnected ?? false;
 
+        /// <summary>
+        /// Haalt de root nodes op voor de OPC UA adresruimte TreeView.
+        /// </summary>
         public ObservableCollection<OpcUaNodeViewModel> RootNodes { get; }
+
+        /// <summary>
+        /// Haalt een collectie op van attributen van de <see cref="SelectedOpcUaNodeInTree"/>.
+        /// </summary>
         public ObservableCollection<NodeAttributeViewModel> SelectedNodeAttributes { get; }
+
+        /// <summary>
+        /// Haalt een collectie op van referenties van de <see cref="SelectedOpcUaNodeInTree"/>.
+        /// </summary>
         public ObservableCollection<ReferenceDescriptionViewModel> SelectedNodeReferences { get; }
 
-        public bool IsBrowseAddressSpace
+        /// <summary>
+        /// Haalt een waarde die aangeeft of de applicatie momenteel bezig is met het browsen van de OPC UA adresruimte, op of stelt deze in.
+        /// Wordt gebruikt om bijvoorbeeld UI-elementen te disablen tijdens het browsen.
+        /// </summary>
+        public bool IsBrowseAddressSpaceProcessing
         {
-            get => _isBrowseAddressSpace;
+            get => _isBrowseAddressSpaceProcessing;
             set
             {
-                if (SetProperty(ref _isBrowseAddressSpace, value))
-                    UpdateCommandStates();
+                if (SetProperty(ref _isBrowseAddressSpaceProcessing, value))
+                {
+                    UpdateCommandStates(); // Commando's die afhankelijk zijn van deze status bijwerken
+                }
             }
         }
 
+        /// <summary>
+        /// Haalt het bericht op dat het resultaat van de laatst uitgevoerde handmatige leesactie van een node-waarde weergeeft, of stelt deze in.
+        /// </summary>
         public string LastReadNodeValueMessage
         {
             get => _lastReadNodeValueMessage;
             set => SetProperty(ref _lastReadNodeValueMessage, value);
         }
 
+        /// <summary>
+        /// Haalt een waarde die aangeeft of de details (attributen en referenties) van de geselecteerde node worden geladen, op of stelt deze in.
+        /// </summary>
         public bool IsLoadingNodeDetails
         {
             get => _isLoadingNodeDetails;
             set => SetProperty(ref _isLoadingNodeDetails, value);
         }
 
+        /// <summary>
+        /// Haalt de momenteel geselecteerde OPC UA node in de TreeView op of stelt deze in.
+        /// Bij het instellen worden de details van de node asynchroon geladen.
+        /// </summary>
         public OpcUaNodeViewModel SelectedOpcUaNodeInTree
         {
             get => _selectedOpcUaNodeInTree;
@@ -72,17 +112,23 @@ namespace Data_Logger.ViewModels
             {
                 if (SetProperty(ref _selectedOpcUaNodeInTree, value))
                 {
-                    _logger.Debug(
-                        "Geselecteerde OPC UA Node in TreeView: {DisplayName}",
-                        _selectedOpcUaNodeInTree?.DisplayName ?? "null"
+                    _specificLogger.Debug(
+                        "Geselecteerde OPC UA Node in TreeView: {DisplayName} ({NodeId}) voor {ConnectionName}",
+                        _selectedOpcUaNodeInTree?.DisplayName ?? "null",
+                        _selectedOpcUaNodeInTree?.NodeId?.ToString() ?? "null",
+                        DisplayName
                     );
                     UpdateCommandStates();
                     if (_selectedOpcUaNodeInTree != null && IsConnected)
                     {
-                        Task.Run(async () => await LoadSelectedNodeDetailsAsync());
+                        // Start asynchroon het laden van node details
+                        Task.Run(async () =>
+                            await LoadSelectedNodeDetailsAsync().ConfigureAwait(false)
+                        );
                     }
                     else
                     {
+                        // Maak attributen en referenties leeg als er geen selectie is of geen verbinding
                         Application.Current?.Dispatcher.Invoke(() =>
                         {
                             SelectedNodeAttributes.Clear();
@@ -93,7 +139,14 @@ namespace Data_Logger.ViewModels
             }
         }
 
+        /// <summary>
+        /// Haalt een observeerbare collectie op van actieve plot-tabbladen die geassocieerd zijn met deze OPC UA-verbinding.
+        /// </summary>
         public ObservableCollection<PlotTabViewModel> ActivePlotTabs { get; }
+
+        /// <summary>
+        /// Haalt de momenteel geselecteerde plot-tab op of stelt deze in.
+        /// </summary>
         public PlotTabViewModel SelectedPlotTab
         {
             get => _selectedPlotTab;
@@ -102,21 +155,50 @@ namespace Data_Logger.ViewModels
         #endregion
 
         #region Commands
+        /// <summary> Commando om verbinding te maken met de OPC UA server. </summary>
         public ICommand ConnectCommand { get; }
+
+        /// <summary> Commando om de verbinding met de OPC UA server te verbreken. </summary>
         public ICommand DisconnectCommand { get; }
+
+        /// <summary> Commando om de huidige waarden van alle geconfigureerde tags te lezen. </summary>
         public ICommand ReadAllConfiguredTagsCommand { get; }
+
+        /// <summary> Commando om de OPC UA adresruimte (opnieuw) te laden. </summary>
         public ICommand LoadAddressSpaceCommand { get; }
+
+        /// <summary> Commando om de geselecteerde node uit de adresruimte-browser toe te voegen aan de monitoringlijst. </summary>
         public ICommand AddSelectedNodeToMonitoringCommand { get; }
+
+        /// <summary> Commando om de geselecteerde node uit de adresruimte-browser te verwijderen uit de monitoringlijst. </summary>
         public ICommand RemoveSelectedNodeFromMonitoringCommand { get; }
+
+        /// <summary> Commando om de huidige waarde van de geselecteerde node in de adresruimte-browser te lezen. </summary>
         public ICommand ReadSelectedNodeValueCommand { get; }
+
+        /// <summary> Commando om een tag uit de lijst van gemonitorde tags te verwijderen. </summary>
         public ICommand UnmonitorTagFromListCommand { get; }
+
+        /// <summary> Commando om een nieuwe plot-tab te openen voor de geselecteerde (gemonitorde) tag. </summary>
         public ICommand OpenNewPlotTabCommand { get; }
+
+        /// <summary> Commando om een tag (vanuit de monitoringlijst) toe te voegen aan een nieuwe of bestaande plot-tab. </summary>
         public ICommand AddTagToPlotCommand { get; }
 
+        /// <summary> Commando om de geselecteerde node/tag toe te voegen aan de momenteel actieve plot-tab. </summary>
         public ICommand AddSelectedTagToCurrentPlotCommand { get; }
         #endregion
 
         #region Constructor
+        /// <summary>
+        /// Initialiseert een nieuwe instantie van de <see cref="OpcUaTabViewModel"/> klasse.
+        /// </summary>
+        /// <param name="config">De OPC UA connectieconfiguratie.</param>
+        /// <param name="logger">De globale Serilog logger instantie.</param>
+        /// <param name="opcUaService">De OPC UA service instantie.</param>
+        /// <param name="statusService">De service voor applicatiestatus.</param>
+        /// <param name="dataLoggingService">De service voor datalogging.</param>
+        /// <param name="settingsService">De service voor instellingenbeheer.</param>
         public OpcUaTabViewModel(
             OpcUaConnectionConfig config,
             ILogger logger,
@@ -127,13 +209,11 @@ namespace Data_Logger.ViewModels
         )
             : base(config)
         {
-            _logger =
+            _specificLogger =
                 logger
                     ?.ForContext<OpcUaTabViewModel>()
-                    .ForContext(
-                        "ConnectionName",
-                        config?.ConnectionName ?? "UnknownOpcUaConnection"
-                    ) ?? throw new ArgumentNullException(nameof(logger));
+                    .ForContext("ConnectionName", config?.ConnectionName ?? "UnknownOpcUa")
+                ?? throw new ArgumentNullException(nameof(logger));
             _opcUaService = opcUaService ?? throw new ArgumentNullException(nameof(opcUaService));
             _statusService =
                 statusService ?? throw new ArgumentNullException(nameof(statusService));
@@ -147,25 +227,28 @@ namespace Data_Logger.ViewModels
             SelectedNodeReferences = new ObservableCollection<ReferenceDescriptionViewModel>();
             ActivePlotTabs = new ObservableCollection<PlotTabViewModel>();
 
-            if (OpcUaConfig != null && OpcUaConfig.TagsToMonitor == null)
+            if (OpcUaConfig != null && OpcUaConfig.TagsToMonitor == null) // Zorg dat de lijst altijd bestaat
             {
                 OpcUaConfig.TagsToMonitor = new ObservableCollection<OpcUaTagConfig>();
             }
 
-            ConnectCommand = new RelayCommand(async _ => await ConnectAsync(), _ => !IsConnected);
+            // Initialiseer Commando's
+            ConnectCommand = new RelayCommand(
+                async _ => await ConnectAsync().ConfigureAwait(false),
+                _ => !IsConnected
+            );
             DisconnectCommand = new RelayCommand(
-                async _ => await DisconnectAsync(),
+                async _ => await DisconnectAsync().ConfigureAwait(false),
                 _ => IsConnected
             );
             ReadAllConfiguredTagsCommand = new RelayCommand(
-                async _ => await ReadAllConfiguredTagsAsync(),
-                _ => IsConnected
+                async _ => await ReadAllConfiguredTagsAsync().ConfigureAwait(false),
+                _ => IsConnected && (OpcUaConfig?.TagsToMonitor?.Any(t => t.IsActive) ?? false)
             );
             LoadAddressSpaceCommand = new RelayCommand(
-                async _ => await LoadInitialAddressSpaceAsync(),
-                _ => IsConnected && !IsBrowseAddressSpace
+                async _ => await LoadInitialAddressSpaceAsync().ConfigureAwait(false),
+                _ => IsConnected && !IsBrowseAddressSpaceProcessing
             );
-
             AddSelectedNodeToMonitoringCommand = new RelayCommand(
                 param =>
                     AddNodeToMonitoring(param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree),
@@ -184,120 +267,166 @@ namespace Data_Logger.ViewModels
             );
             ReadSelectedNodeValueCommand = new RelayCommand(
                 async param =>
-                    await ReadNodeValueAsync(
-                        param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree
-                    ),
+                    await ReadNodeValueAsync(param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree)
+                        .ConfigureAwait(false),
                 param => CanReadNodeValue(param as OpcUaNodeViewModel ?? SelectedOpcUaNodeInTree)
             );
             UnmonitorTagFromListCommand = new RelayCommand(
                 param => UnmonitorTag(param as OpcUaTagConfig),
                 param => param is OpcUaTagConfig
             );
-
-            AddTagToPlotCommand = new RelayCommand(
-                ExecuteAddTagToPlot,
-                CanExecuteAddTagToPlotParameter
-            );
             OpenNewPlotTabCommand = new RelayCommand(
                 ExecuteOpenNewPlotTabForSelected,
                 CanExecuteOpenNewPlotTabForSelected
             );
-
+            AddTagToPlotCommand = new RelayCommand(
+                ExecuteAddTagToPlot,
+                CanExecuteAddTagToPlotParameter
+            );
             AddSelectedTagToCurrentPlotCommand = new RelayCommand(
                 ExecuteAddSelectedTagToCurrentPlot,
                 CanExecuteAddSelectedTagToCurrentPlot
             );
 
+            // Abonneer op service events
             _opcUaService.ConnectionStatusChanged += OnOpcUaConnectionStatusChanged;
             _opcUaService.TagsDataReceived += OnOpcUaTagsDataReceived;
 
-            _logger.Debug("OpcUaTabViewModel geïnitialiseerd voor {ConnectionName}", DisplayName);
+            ResetAllTagBaselinesAndAlarms(); // Zorg voor een schone start van alarm statussen
+
+            _specificLogger.Debug(
+                "OpcUaTabViewModel geïnitialiseerd voor {ConnectionName}",
+                DisplayName
+            );
         }
         #endregion
 
         #region Connection and Data Handling
+        /// <summary>
+        /// Probeert verbinding te maken met de OPC UA server en start monitoring bij succes.
+        /// </summary>
         private async Task ConnectAsync()
         {
             _statusService.SetStatus(
                 ApplicationStatus.Connecting,
-                $"Verbinden met OPC UA: {OpcUaConfig?.ConnectionName}..."
+                $"Verbinden met OPC UA: {DisplayName}..."
             );
-            _logger.Information("Verbindingspoging gestart voor {ConnectionName}...", DisplayName);
-            ResetAllTagBaselinesAndAlarms();
-            bool success = await _opcUaService.ConnectAsync();
+            _specificLogger.Information(
+                "Verbindingspoging gestart voor {ConnectionName}...",
+                DisplayName
+            );
+            ResetAllTagBaselinesAndAlarms(); // Reset alarmen en baselines voor een schone staat
+
+            bool success = await _opcUaService.ConnectAsync().ConfigureAwait(false);
             if (success)
             {
                 _statusService.SetStatus(
                     ApplicationStatus.Logging,
-                    $"Verbonden met OPC UA: {OpcUaConfig?.ConnectionName}."
+                    $"Verbonden met OPC UA: {DisplayName}."
                 );
-                _logger.Information("Verbinding succesvol voor {ConnectionName}.", DisplayName);
-                await LoadInitialAddressSpaceAsync();
-                await _opcUaService.StartMonitoringTagsAsync();
+                _specificLogger.Information(
+                    "Verbinding succesvol voor {ConnectionName}.",
+                    DisplayName
+                );
+                await LoadInitialAddressSpaceAsync().ConfigureAwait(false); // Laad de adresruimte
+                await _opcUaService.StartMonitoringTagsAsync().ConfigureAwait(false); // Start tag monitoring
             }
             else
             {
                 _statusService.SetStatus(
                     ApplicationStatus.Error,
-                    $"Kon niet verbinden met OPC UA: {OpcUaConfig?.ConnectionName}."
+                    $"Kon niet verbinden met OPC UA: {DisplayName}."
                 );
-                _logger.Warning("Verbinding mislukt voor {ConnectionName}.", DisplayName);
+                _specificLogger.Warning("Verbinding mislukt voor {ConnectionName}.", DisplayName);
             }
             UpdateCommandStates();
         }
 
+        /// <summary>
+        /// Verbreekt de verbinding met de OPC UA server en stopt monitoring.
+        /// </summary>
         private async Task DisconnectAsync()
         {
-            _logger.Information("Verbinding verbreken voor {ConnectionName}...", DisplayName);
-            await _opcUaService.StopMonitoringTagsAsync();
-            await _opcUaService.DisconnectAsync();
+            _specificLogger.Information(
+                "Verbinding verbreken voor {ConnectionName}...",
+                DisplayName
+            );
+            await _opcUaService.StopMonitoringTagsAsync().ConfigureAwait(false);
+            await _opcUaService.DisconnectAsync().ConfigureAwait(false);
             _statusService.SetStatus(
                 ApplicationStatus.Idle,
-                $"OPC UA verbinding verbroken: {OpcUaConfig?.ConnectionName}."
+                $"OPC UA verbinding verbroken: {DisplayName}."
             );
-            _logger.Information("Verbinding verbroken voor {ConnectionName}.", DisplayName);
+            _specificLogger.Information("Verbinding verbroken voor {ConnectionName}.", DisplayName);
+
+            // Ruim UI elementen op die afhankelijk zijn van de verbinding
             Application.Current?.Dispatcher.Invoke(() =>
             {
                 RootNodes.Clear();
                 SelectedNodeAttributes.Clear();
                 SelectedNodeReferences.Clear();
+                foreach (var plotTab in ActivePlotTabs.ToList())
+                    RemovePlotTab(plotTab); // Sluit en dispose plot tabs
                 ActivePlotTabs.Clear();
                 SelectedPlotTab = null;
             });
             UpdateCommandStates();
         }
 
+        /// <summary>
+        /// Event handler voor wijzigingen in de OPC UA connectiestatus.
+        /// Werkt UI-elementen en commando statussen bij.
+        /// </summary>
         private void OnOpcUaConnectionStatusChanged(object sender, EventArgs e)
         {
-            _logger.Debug(
+            _specificLogger.Debug(
                 "OpcUaConnectionStatusChanged. IsConnected: {IsConnected} voor {ConnectionName}",
                 _opcUaService.IsConnected,
                 DisplayName
             );
-            OnPropertyChanged(nameof(IsConnected));
+            OnPropertyChanged(nameof(IsConnected)); // Notificeer UI
             UpdateCommandStates();
 
             if (!_opcUaService.IsConnected)
             {
+                // Ruim UI op die afhankelijk is van een actieve verbinding
                 Application.Current?.Dispatcher.Invoke(() =>
                 {
                     RootNodes.Clear();
                     SelectedNodeAttributes.Clear();
                     SelectedNodeReferences.Clear();
+                    foreach (var plotTab in ActivePlotTabs.ToList())
+                        RemovePlotTab(plotTab);
                     ActivePlotTabs.Clear();
                     SelectedPlotTab = null;
+                    if (OpcUaConfig?.TagsToMonitor != null)
+                    {
+                        foreach (var tag in OpcUaConfig.TagsToMonitor) // Reset live data in config
+                        {
+                            tag.CurrentValue = null;
+                            tag.IsGoodQuality = false;
+                            tag.ErrorMessage = "Niet verbonden";
+                            tag.CurrentAlarmState = TagAlarmState.Error;
+                        }
+                    }
                 });
             }
-            else
+            else // Indien succesvol (her)verbonden
             {
-                ResetAllTagBaselinesAndAlarms();
-                if (!RootNodes.Any() && !IsBrowseAddressSpace)
+                ResetAllTagBaselinesAndAlarms(); // Reset alarmen voor een schone start
+                if (!RootNodes.Any() && !IsBrowseAddressSpaceProcessing) // Als adresruimte nog niet geladen is
                 {
-                    Task.Run(async () => await LoadInitialAddressSpaceAsync());
+                    Task.Run(async () => await LoadInitialAddressSpaceAsync().ConfigureAwait(false)
+                    );
                 }
             }
         }
 
+        /// <summary>
+        /// Event handler voor ontvangen OPC UA tag data.
+        /// Werkt de overeenkomstige <see cref="OpcUaTagConfig"/> objecten bij met live data,
+        /// past alarm/outlier logica toe, en stuurt data door naar actieve plots.
+        /// </summary>
         private void OnOpcUaTagsDataReceived(
             object sender,
             IEnumerable<LoggedTagValue> receivedTagValues
@@ -307,35 +436,40 @@ namespace Data_Logger.ViewModels
             if (!tagValuesList.Any())
                 return;
 
-            _logger.Debug(
+            _specificLogger.Verbose(
                 "OnOpcUaTagsDataReceived: {Count} tag(s) ontvangen voor {ConnectionName}",
                 tagValuesList.Count,
                 DisplayName
             );
 
-            Application.Current?.Dispatcher.Invoke(() =>
+            Application.Current?.Dispatcher.Invoke(() => // Zorg voor UI thread access
             {
                 foreach (var liveValue in tagValuesList)
                 {
-                    _logger.Debug(
-                        "Ontvangen LiveValue: Tag='{Tag}', Val='{Val}', QualityGood={Qual}, ErrMsg='{Err}'",
+                    _specificLogger.Verbose(
+                        "Ontvangen LiveValue voor {ConnectionName}: Tag='{Tag}', Waarde='{Val}', Kwaliteit={Qual}, ErrMsg='{Err}', Tijdstempel='{Ts:O}'",
+                        DisplayName,
                         liveValue.TagName,
                         liveValue.Value,
                         liveValue.IsGoodQuality,
-                        liveValue.ErrorMessage
+                        liveValue.ErrorMessage,
+                        liveValue.Timestamp
                     );
 
+                    // Vind de corresponderende tag configuratie. TagName in LoggedTagValue komt van MonitoredItem.DisplayName, wat we instellen op OpcUaTagConfig.TagName
                     var configuredTag = OpcUaConfig?.TagsToMonitor.FirstOrDefault(t =>
-                        t.TagName == liveValue.TagName || t.NodeId == liveValue.TagName
+                        t.TagName == liveValue.TagName
                     );
 
                     if (configuredTag != null)
                     {
+                        // Update live data in de configuratie (voor UI binding)
                         configuredTag.CurrentValue = liveValue.Value;
                         configuredTag.Timestamp = liveValue.Timestamp;
                         configuredTag.IsGoodQuality = liveValue.IsGoodQuality;
                         configuredTag.ErrorMessage = liveValue.ErrorMessage;
 
+                        // Pas alarm en outlier logica toe
                         TagAlarmState finalAlarmState;
                         double? numericValueForAlarmCheck = null;
                         double? limitDetailsForThreshold = null;
@@ -348,10 +482,11 @@ namespace Data_Logger.ViewModels
                         }
                         else if (!TryConvertToDouble(liveValue.Value, out double valForCheck))
                         {
-                            _logger.Warning(
-                                "Waarde '{RawValue}' voor tag '{TagName}' kon niet naar double voor alarm/outlier check.",
+                            _specificLogger.Warning(
+                                "Waarde '{RawValue}' voor tag '{TagName}' ({ConnectionName}) kon niet naar double geconverteerd worden voor alarm/outlier check.",
                                 liveValue.Value,
-                                configuredTag.TagName
+                                configuredTag.TagName,
+                                DisplayName
                             );
                             finalAlarmState = TagAlarmState.Error;
                             if (configuredTag.IsOutlierDetectionEnabled)
@@ -379,69 +514,71 @@ namespace Data_Logger.ViewModels
                             limitDetailsForThreshold
                         );
 
-                        if (liveValue.IsGoodQuality)
+                        // Stuur data door naar actieve plots
+                        if (liveValue.IsGoodQuality && numericValueForAlarmCheck.HasValue) // Gebruik de al geconverteerde waarde
                         {
-                            if (TryConvertToDouble(liveValue.Value, out double numericValue))
+                            foreach (var plotTab in ActivePlotTabs)
                             {
-                                
-                                foreach (var plotTab in ActivePlotTabs)
-                                {
-                                    
-                                    
-                                    if (
-                                        plotTab.PlotModel.Series.Any(s =>
-                                            s.Title == configuredTag.TagName
-                                        )
+                                if (
+                                    plotTab.PlotModel.Series.Any(s =>
+                                        s.Title == configuredTag.TagName
                                     )
-                                    {
-                                        _logger.Debug(
-                                            "Plot Data Routing: TagName='{PlotSeriesKey}', Timestamp='{Ts}', Value={Val} naar plotTab '{PlotHeader}'",
-                                            configuredTag.TagName,
-                                            liveValue.Timestamp,
-                                            numericValue,
-                                            plotTab.Header
-                                        );
-                                        plotTab.AddDataPoint(
-                                            liveValue.Timestamp,
-                                            numericValue,
-                                            configuredTag.TagName
-                                        );
-                                    }
+                                )
+                                {
+                                    _specificLogger.Verbose(
+                                        "Plot Data Routing (OPC UA): TagName='{PlotSeriesKey}', Timestamp='{Ts}', Value={Val} naar plotTab '{PlotHeader}' voor {ConnectionName}",
+                                        configuredTag.TagName,
+                                        liveValue.Timestamp,
+                                        numericValueForAlarmCheck.Value,
+                                        plotTab.Header,
+                                        DisplayName
+                                    );
+                                    plotTab.AddDataPoint(
+                                        liveValue.Timestamp,
+                                        numericValueForAlarmCheck.Value,
+                                        configuredTag.TagName
+                                    );
                                 }
                             }
                         }
-                        else
+                        else if (!liveValue.IsGoodQuality)
                         {
-                            _logger.Warning(
-                                "Plotting: Slechte kwaliteit data voor tag '{ConfiguredTagName}' (NodeId: {NodeId}). Kwaliteit: {Quality}, Error: '{Error}'. Geen punt toegevoegd aan grafiek.",
+                            _specificLogger.Warning(
+                                "Plotting (OPC UA): Slechte kwaliteit data voor tag '{ConfiguredTagName}' ({ConnectionName}). NodeId: {NodeId}. Kwaliteit: {Quality}, Error: '{Error}'. Geen punt toegevoegd aan grafiek.",
                                 configuredTag.TagName,
+                                DisplayName,
                                 configuredTag.NodeId,
                                 liveValue.IsGoodQuality,
                                 liveValue.ErrorMessage
-                            ); 
+                            );
                         }
                     }
                     else
                     {
-                        _logger.Verbose(
-                            "OnOpcUaTagsDataReceived: Geen geconfigureerde tag gevonden voor TagName/NodeId '{TagName}'",
-                            liveValue.TagName
+                        _specificLogger.Warning(
+                            "OnOpcUaTagsDataReceived: Geen geconfigureerde tag gevonden voor ontvangen TagName '{TagName}' voor {ConnectionName}. Data niet verwerkt voor alarmen/plots.",
+                            liveValue.TagName,
+                            DisplayName
                         );
                     }
                 }
             });
 
+            // Log data naar persistentie
             if (OpcUaConfig != null)
             {
                 _dataLoggingService.LogTagValues(OpcUaConfig.ConnectionName, tagValuesList);
             }
         }
 
+        /// <summary>
+        /// Reset de baseline en alarmstatus voor alle geconfigureerde OPC UA tags.
+        /// </summary>
         private void ResetAllTagBaselinesAndAlarms()
         {
             if (OpcUaConfig?.TagsToMonitor != null)
             {
-                _logger.Information(
+                _specificLogger.Information(
                     "Resetten van baselines en alarmen voor alle relevante tags in {ConnectionName}.",
                     DisplayName
                 );
@@ -449,8 +586,7 @@ namespace Data_Logger.ViewModels
                 {
                     if (tag.IsOutlierDetectionEnabled)
                     {
-                        tag.ResetBaselineState();
-                        _logger.Debug("Baseline gereset voor tag {TagName}", tag.TagName);
+                        tag.ResetBaselineState(); // De ResetBaselineState methode logt zelf ook al.
                     }
                     tag.CurrentAlarmState = TagAlarmState.Normal;
                     tag.AlarmTimestamp = null;
@@ -460,6 +596,13 @@ namespace Data_Logger.ViewModels
         #endregion
 
         #region Alarm and Outlier Logic
+        /// <summary>
+        /// Bepaalt de alarmstatus van een tag op basis van geconfigureerde drempelwaarden.
+        /// </summary>
+        /// <param name="tagConfig">De configuratie van de tag.</param>
+        /// <param name="numericValue">De huidige numerieke waarde van de tag.</param>
+        /// <param name="limitDetails">Output parameter; de specifieke limiet die is overschreden, indien van toepassing.</param>
+        /// <returns>De berekende <see cref="TagAlarmState"/>.</returns>
         private TagAlarmState DetermineThresholdAlarmState(
             OpcUaTagConfig tagConfig,
             double numericValue,
@@ -490,19 +633,29 @@ namespace Data_Logger.ViewModels
                 limitDetails = tagConfig.LowLimit.Value;
                 return TagAlarmState.Low;
             }
+
             return TagAlarmState.Normal;
         }
 
+        /// <summary>
+        /// Bepaalt of de huidige waarde van een tag een statistische uitschieter (outlier) is,
+        /// gebaseerd op een expanding window baseline berekening (Welford's algoritme stijl).
+        /// Werkt de baseline statistieken (<see cref="OpcUaTagConfig.BaselineMean"/>, <see cref="OpcUaTagConfig.BaselineStandardDeviation"/>, etc.) bij.
+        /// </summary>
+        /// <param name="tagConfig">De configuratie van de tag, inclusief baseline parameters en staat.</param>
+        /// <param name="numericValue">De huidige numerieke waarde van de tag.</param>
+        /// <returns>True als de waarde als een outlier wordt beschouwd; anders false.</returns>
         private bool IsCurrentValueOutlier(OpcUaTagConfig tagConfig, double numericValue)
         {
             if (!tagConfig.IsOutlierDetectionEnabled)
                 return false;
 
+            // Welford's algorithm for online variance/std deviation
             tagConfig.CurrentBaselineCount++;
-            double delta = numericValue - tagConfig.BaselineMean;
-            tagConfig.BaselineMean += delta / tagConfig.CurrentBaselineCount;
-            double delta2 = numericValue - tagConfig.BaselineMean;
-            tagConfig.SumOfSquaresForBaseline += delta * delta2;
+            double delta = numericValue - tagConfig.BaselineMean; // Gebruik *vorige* gemiddelde voor delta
+            tagConfig.BaselineMean += delta / tagConfig.CurrentBaselineCount; // Update gemiddelde
+            double delta2 = numericValue - tagConfig.BaselineMean; // Gebruik *nieuwe* gemiddelde voor delta2
+            tagConfig.SumOfSquaresForBaseline += delta * delta2; // Update som van kwadratische verschillen
 
             bool baselineJustEstablished = false;
             if (
@@ -511,61 +664,64 @@ namespace Data_Logger.ViewModels
             )
             {
                 tagConfig.IsBaselineEstablished = true;
-                baselineJustEstablished = true;
+                baselineJustEstablished = true; // Markeer dat baseline net is vastgesteld
                 if (tagConfig.CurrentBaselineCount > 1)
                 {
                     double variance =
                         tagConfig.SumOfSquaresForBaseline / (tagConfig.CurrentBaselineCount - 1);
-                    tagConfig.BaselineStandardDeviation = Math.Sqrt(variance < 0 ? 0 : variance);
+                    tagConfig.BaselineStandardDeviation = Math.Sqrt(Math.Max(0, variance)); // Voorkom negatieve wortel door floating point onnauwkeurigheden
                 }
                 else
                 {
-                    tagConfig.BaselineStandardDeviation = 0;
+                    tagConfig.BaselineStandardDeviation = 0; // StdDev van 1 punt is 0
                 }
-                _logger.Information(
-                    "Expanding baseline VASTGESTELD voor tag {TagName} na {Samples} samples: Mean={Mean:F2}, StdDev={StdDev:F2}",
+                _specificLogger.Information(
+                    "Expanding baseline VASTGESTELD voor tag {TagName} ({ConnectionName}) na {Samples} samples: Mean={Mean:F2}, StdDev={StdDev:F2}",
                     tagConfig.TagName,
+                    DisplayName,
                     tagConfig.CurrentBaselineCount,
                     tagConfig.BaselineMean,
                     tagConfig.BaselineStandardDeviation
                 );
             }
-            else if (tagConfig.IsBaselineEstablished && tagConfig.CurrentBaselineCount > 1)
+            else if (tagConfig.IsBaselineEstablished && tagConfig.CurrentBaselineCount > 1) // Blijf StdDev updaten als baseline is vastgesteld
             {
                 double variance =
                     tagConfig.SumOfSquaresForBaseline / (tagConfig.CurrentBaselineCount - 1);
-                tagConfig.BaselineStandardDeviation = Math.Sqrt(variance < 0 ? 0 : variance);
-                _logger.Verbose(
-                    "Expanding baseline BIJGEWERKT voor {TagName} (N={N}): Mean={Mean:F2}, StdDev={StdDev:F2}",
+                tagConfig.BaselineStandardDeviation = Math.Sqrt(Math.Max(0, variance));
+                _specificLogger.Verbose(
+                    "Expanding baseline BIJGEWERKT voor {TagName} ({ConnectionName}) (N={N}): Mean={Mean:F2}, StdDev={StdDev:F2}",
                     tagConfig.TagName,
+                    DisplayName,
                     tagConfig.CurrentBaselineCount,
                     tagConfig.BaselineMean,
                     tagConfig.BaselineStandardDeviation
                 );
             }
-            else if (tagConfig.CurrentBaselineCount == 1)
+            else if (tagConfig.CurrentBaselineCount == 1) // Eerste datapunt voor baseline
             {
                 tagConfig.BaselineStandardDeviation = 0;
-                _logger.Debug(
-                    "Expanding Baseline voor {TagName}: Eerste datapunt (N=1) ontvangen: {Value}. Mean={Mean}, StdDev=0.",
+                _specificLogger.Debug(
+                    "Expanding Baseline voor {TagName} ({ConnectionName}): Eerste datapunt (N=1) ontvangen: {Value}. Mean={Mean}, StdDev=0.",
                     tagConfig.TagName,
+                    DisplayName,
                     numericValue,
                     tagConfig.BaselineMean
                 );
             }
 
-            if (!tagConfig.IsBaselineEstablished)
-                return false;
-            if (baselineJustEstablished)
-                return false;
+            if (!tagConfig.IsBaselineEstablished || baselineJustEstablished)
+                return false; // Geen outlier als baseline nog niet (volledig) is opgebouwd, of net opgebouwd
 
-            if (tagConfig.BaselineStandardDeviation == 0)
+            // Als standaarddeviatie (bijna) nul is, is elke afwijking van het gemiddelde een outlier.
+            if (tagConfig.BaselineStandardDeviation < 1e-9) // Kleine tolerantie voor floating point issues
             {
-                bool isDifferent = Math.Abs(numericValue - tagConfig.BaselineMean) > 1e-9;
+                bool isDifferent = Math.Abs(numericValue - tagConfig.BaselineMean) > 1e-9; // Vergelijk met kleine epsilon
                 if (isDifferent)
-                    _logger.Verbose(
-                        "Outlier (zero StdDev) gedetecteerd voor {TagName}: Waarde {NumericValue} != BaselineMean {BaselineMean}",
+                    _specificLogger.Verbose(
+                        "Outlier (zero StdDev) gedetecteerd voor {TagName} ({ConnectionName}): Waarde {NumericValue} != BaselineMean {BaselineMean}",
                         tagConfig.TagName,
+                        DisplayName,
                         numericValue,
                         tagConfig.BaselineMean
                     );
@@ -576,11 +732,13 @@ namespace Data_Logger.ViewModels
             bool isAnOutlier =
                 deviation
                 > (tagConfig.OutlierStandardDeviationFactor * tagConfig.BaselineStandardDeviation);
+
             if (isAnOutlier)
             {
-                _logger.Verbose(
-                    "Outlier gedetecteerd voor {TagName}: Waarde {NumericValue}. Afwijking: {Deviation:F2} > ({Factor} * {StdDev:F2} = {Threshold:F2})",
+                _specificLogger.Information(
+                    "Outlier gedetecteerd voor {TagName} ({ConnectionName}): Waarde {NumericValue}. Afwijking: {Deviation:F2} > (Factor {Factor} * StdDev {StdDev:F2} = Drempel {Threshold:F2})",
                     tagConfig.TagName,
+                    DisplayName,
                     numericValue,
                     deviation,
                     tagConfig.OutlierStandardDeviationFactor,
@@ -591,6 +749,10 @@ namespace Data_Logger.ViewModels
             return isAnOutlier;
         }
 
+        /// <summary>
+        /// Werkt de <see cref="OpcUaTagConfig.CurrentAlarmState"/> bij en logt een bericht als de status verandert.
+        /// Stelt ook de <see cref="OpcUaTagConfig.AlarmTimestamp"/> in.
+        /// </summary>
         private void UpdateAndLogFinalAlarmState(
             OpcUaTagConfig tagConfig,
             LoggedTagValue liveValue,
@@ -602,12 +764,12 @@ namespace Data_Logger.ViewModels
             if (tagConfig.CurrentAlarmState != newFinalState)
             {
                 var previousState = tagConfig.CurrentAlarmState;
-                tagConfig.CurrentAlarmState = newFinalState;
+                tagConfig.CurrentAlarmState = newFinalState; // Update de status in de tag configuratie
                 string valueString = numericValueForLog.HasValue
-                    ? numericValueForLog.Value.ToString(CultureInfo.InvariantCulture)
+                    ? numericValueForLog.Value.ToString("G", CultureInfo.InvariantCulture)
                     : liveValue.Value?.ToString() ?? "N/A";
 
-                if (newFinalState != TagAlarmState.Normal && newFinalState != TagAlarmState.Error)
+                if (newFinalState != TagAlarmState.Normal && newFinalState != TagAlarmState.Error) // Een daadwerkelijk alarm of outlier
                 {
                     tagConfig.AlarmTimestamp = liveValue.Timestamp;
                     string alarmDetail = "";
@@ -616,7 +778,10 @@ namespace Data_Logger.ViewModels
                             $"Afwijking van baseline (Mean: {tagConfig.BaselineMean:F2}, StdDev: {tagConfig.BaselineStandardDeviation:F2}, Factor: {tagConfig.OutlierStandardDeviationFactor})";
                     else if (limitDetailsForLog.HasValue)
                         alarmDetail =
-                            $"Limiet overschreden: {limitDetailsForLog.Value.ToString(CultureInfo.InvariantCulture)}";
+                            $"Limiet ({limitDetailsForLog.Value.ToString(CultureInfo.InvariantCulture)}) overschreden";
+                    else
+                        alarmDetail = "Limiet overschreden (details niet gespecificeerd)";
+
                     string formattedMessage = tagConfig
                         .AlarmMessageFormat.Replace("{TagName}", tagConfig.TagName)
                         .Replace("{AlarmState}", newFinalState.ToString())
@@ -626,8 +791,9 @@ namespace Data_Logger.ViewModels
                             limitDetailsForLog?.ToString(CultureInfo.InvariantCulture) ?? "N/A"
                         );
 
-                    _logger.Warning(
-                        "ALARMSTAAT GEWIJZIGD: Tag {TagName} van {PreviousState} naar {NewState}. Waarde: {LiveValue}. Details: {AlarmDetail}. Bericht: {FormattedMessage}",
+                    _specificLogger.Warning(
+                        "ALARMSTAAT GEWIJZIGD ({ConnectionName}): Tag {TagName} van {PreviousState} naar {NewState}. Waarde: {LiveValue}. Details: {AlarmDetail}. Bericht: {FormattedMessage}",
+                        DisplayName,
                         tagConfig.TagName,
                         previousState,
                         newFinalState,
@@ -637,7 +803,7 @@ namespace Data_Logger.ViewModels
                     );
                     _statusService.SetStatus(
                         ApplicationStatus.Warning,
-                        $"Alarm: {tagConfig.TagName} is {newFinalState}"
+                        $"Alarm: {tagConfig.TagName} ({DisplayName}) is {newFinalState}"
                     );
                 }
                 else if (
@@ -646,11 +812,12 @@ namespace Data_Logger.ViewModels
                         previousState != TagAlarmState.Normal
                         && previousState != TagAlarmState.Error
                     )
-                )
+                ) // Hersteld van alarm/outlier
                 {
-                    tagConfig.AlarmTimestamp = null;
-                    _logger.Information(
-                        "ALARM HERSTELD: Tag {TagName} van {PreviousState} naar Normaal. Waarde: {LiveValue}",
+                    tagConfig.AlarmTimestamp = null; // Reset timestamp
+                    _specificLogger.Information(
+                        "ALARM HERSTELD ({ConnectionName}): Tag {TagName} van {PreviousState} naar Normaal. Waarde: {LiveValue}",
+                        DisplayName,
                         tagConfig.TagName,
                         previousState,
                         valueString
@@ -659,76 +826,93 @@ namespace Data_Logger.ViewModels
                 else if (
                     newFinalState == TagAlarmState.Error
                     && previousState != TagAlarmState.Error
-                )
+                ) // Nieuwe Error status
                 {
-                    tagConfig.AlarmTimestamp = liveValue.Timestamp;
-                    _logger.Error(
-                        "FOUTSTATUS: Tag {TagName} naar status Error. Waarde: {LiveValue}",
+                    tagConfig.AlarmTimestamp = liveValue.Timestamp; // Zet timestamp voor error
+                    _specificLogger.Error(
+                        "FOUTSTATUS ({ConnectionName}): Tag {TagName} van {PreviousState} naar status Error. Waarde: {LiveValue}. Oorspronkelijke Fout: {OriginalError}",
+                        DisplayName,
                         tagConfig.TagName,
-                        valueString
+                        previousState,
+                        valueString,
+                        liveValue.ErrorMessage ?? "N/A"
+                    );
+                    _statusService.SetStatus(
+                        ApplicationStatus.Error,
+                        $"Foutstatus voor tag: {tagConfig.TagName} ({DisplayName})"
                     );
                 }
             }
         }
 
+        /// <summary>
+        /// Probeert de gegeven object waarde te converteren naar een double.
+        /// </summary>
         protected bool TryConvertToDouble(object value, out double result)
         {
             result = 0;
             if (value == null)
                 return false;
-            if (value is double d)
+            Type valueType = value.GetType();
+
+            if (valueType == typeof(double))
             {
-                result = d;
+                result = (double)value;
                 return true;
             }
-            if (value is float f)
+            if (valueType == typeof(float))
             {
-                result = (double)f;
+                result = (double)(float)value;
                 return true;
             }
-            if (value is int i1)
+            if (valueType == typeof(int))
             {
-                result = i1;
+                result = (double)(int)value;
                 return true;
             }
-            if (value is uint ui)
+            if (valueType == typeof(uint))
             {
-                result = ui;
+                result = (double)(uint)value;
                 return true;
             }
-            if (value is long l)
+            if (valueType == typeof(long))
             {
-                result = l;
+                result = (double)(long)value;
                 return true;
             }
-            if (value is ulong ul)
+            if (valueType == typeof(ulong))
             {
-                result = ul;
+                result = (double)(ulong)value;
                 return true;
             }
-            if (value is short s)
+            if (valueType == typeof(short))
             {
-                result = s;
+                result = (double)(short)value;
                 return true;
             }
-            if (value is ushort us)
+            if (valueType == typeof(ushort))
             {
-                result = us;
+                result = (double)(ushort)value;
                 return true;
             }
-            if (value is byte b)
+            if (valueType == typeof(byte))
             {
-                result = b;
+                result = (double)(byte)value;
                 return true;
             }
-            if (value is sbyte sb)
+            if (valueType == typeof(sbyte))
             {
-                result = sb;
+                result = (double)(sbyte)value;
                 return true;
             }
-            if (value is decimal dec)
+            if (valueType == typeof(decimal))
             {
-                result = (double)dec;
+                result = (double)(decimal)value;
+                return true;
+            }
+            if (valueType == typeof(bool))
+            {
+                result = (bool)value ? 1.0 : 0.0;
                 return true;
             }
             if (value is string sValue)
@@ -738,59 +922,56 @@ namespace Data_Logger.ViewModels
                         sValue,
                         NumberStyles.Any,
                         CultureInfo.InvariantCulture,
-                        out double parsedDouble
+                        out result
                     )
                 )
-                {
-                    result = parsedDouble;
                     return true;
-                }
-                else if (
+                if (
                     double.TryParse(
                         sValue,
                         NumberStyles.Any,
                         CultureInfo.CurrentCulture,
-                        out parsedDouble
+                        out result
                     )
                 )
-                {
-                    result = parsedDouble;
-                    return true;
-                }
+                    return true; // Fallback
             }
             try
             {
                 result = Convert.ToDouble(value, CultureInfo.InvariantCulture);
                 return true;
             }
-            catch
-            {
-                return false;
-            }
+            catch { }
+            return false;
         }
         #endregion
 
         #region Configuration Handling
+        /// <inheritdoc/>
         public void UpdateConfiguration(OpcUaConnectionConfig newConfig)
         {
-            _logger.Information(
+            _specificLogger.Information(
                 "Warme configuratie update (via Settings) voor OPC UA verbinding {ConnectionName}",
                 newConfig.ConnectionName
             );
-            ConnectionConfiguration = newConfig;
-            OnPropertyChanged(nameof(OpcUaConfig));
+            ConnectionConfiguration = newConfig; // Update base property
+            OnPropertyChanged(nameof(OpcUaConfig)); // Notificeer UI over de getypte property
             if (DisplayName != newConfig.ConnectionName)
                 DisplayName = newConfig.ConnectionName;
-            _opcUaService.Reconfigure(newConfig);
+            _opcUaService.Reconfigure(newConfig); // Geef door aan de service
         }
 
+        /// <summary>
+        /// Slaat wijzigingen voor een specifieke OPC UA tag configuratie op.
+        /// </summary>
         public void SaveChangesForTagConfig(OpcUaTagConfig modifiedTagConfig)
         {
             if (modifiedTagConfig == null)
                 return;
-            _logger.Information(
-                "Wijzigingen voor tag '{TagName}' (IsActive: {IsActive}, Interval: {Interval}, Alarming: {IsAlarmingEnabled}, Outlier: {IsOutlierEnabled}) worden opgeslagen.",
+            _specificLogger.Information(
+                "Wijzigingen voor tag '{TagName}' ({ConnectionName}) worden opgeslagen. IsActive: {IsActive}, Interval: {Interval}, Alarming: {IsAlarmingEnabled}, Outlier: {IsOutlierEnabled}",
                 modifiedTagConfig.TagName,
+                DisplayName,
                 modifiedTagConfig.IsActive,
                 modifiedTagConfig.SamplingInterval,
                 modifiedTagConfig.IsAlarmingEnabled,
@@ -798,30 +979,32 @@ namespace Data_Logger.ViewModels
             );
             if (modifiedTagConfig.IsOutlierDetectionEnabled)
             {
-                modifiedTagConfig.ResetBaselineState();
-                _logger.Debug(
-                    "Baseline state gereset voor tag {TagName} vanwege configuratiewijziging.",
-                    modifiedTagConfig.TagName
-                );
+                modifiedTagConfig.ResetBaselineState(); // Reset baseline als outlier settings veranderen
             }
             _statusService.SetStatus(
                 ApplicationStatus.Saving,
-                $"Wijziging voor '{modifiedTagConfig.TagName}' opslaan..."
+                $"Wijziging voor tag '{modifiedTagConfig.TagName}' opslaan..."
             );
             SaveSettingsAndUpdateService();
         }
 
+        /// <summary>
+        /// Slaat alle instellingen op en herconfigureert de OPC UA service.
+        /// </summary>
         private void SaveSettingsAndUpdateService()
         {
             _settingsService.SaveSettings();
-            _logger.Information("Instellingen opgeslagen na tag configuratie wijziging.");
+            _specificLogger.Information(
+                "Instellingen opgeslagen na tag configuratie wijziging voor {ConnectionName}.",
+                DisplayName
+            );
             if (IsConnected && OpcUaConfig != null)
             {
-                _logger.Information(
+                _specificLogger.Information(
                     "OPC UA Service herconfigureren na tag wijziging voor {ConnectionName}",
                     DisplayName
                 );
-                _opcUaService.Reconfigure(OpcUaConfig);
+                _opcUaService.Reconfigure(OpcUaConfig); // Dit triggert mogelijk een herstart van monitoring
                 _statusService.SetStatus(
                     ApplicationStatus.Logging,
                     $"Monitoring geüpdatet voor {DisplayName}."
@@ -838,19 +1021,24 @@ namespace Data_Logger.ViewModels
         #endregion
 
         #region Node Browser Logic
+        /// <summary>
+        /// Laadt asynchroon de initiële OPC UA adresruimte (root nodes).
+        /// </summary>
         private async Task LoadInitialAddressSpaceAsync()
         {
-            if (!IsConnected || _opcUaService == null || IsBrowseAddressSpace)
+            if (!IsConnected || _opcUaService == null || IsBrowseAddressSpaceProcessing)
                 return;
-            IsBrowseAddressSpace = true;
-            _logger.Information(
+            IsBrowseAddressSpaceProcessing = true;
+            _specificLogger.Information(
                 "Laden van initiële OPC UA address space voor {ConnectionName}",
                 DisplayName
             );
             Application.Current?.Dispatcher.Invoke(() => RootNodes.Clear());
             try
             {
-                ReferenceDescriptionCollection rootItems = await _opcUaService.BrowseRootAsync();
+                ReferenceDescriptionCollection rootItems = await _opcUaService
+                    .BrowseRootAsync()
+                    .ConfigureAwait(false);
                 if (rootItems != null)
                 {
                     var namespaceUris = _opcUaService.NamespaceUris;
@@ -865,11 +1053,10 @@ namespace Data_Logger.ViewModels
                         }
                         catch (Exception ex)
                         {
-                            _logger.Error(
+                            _specificLogger.Error(
                                 ex,
-                                "Fout bij converteren root ExpandedNodeId {ExpNodeId} voor {ItemDisplayName}",
-                                item.NodeId,
-                                item.DisplayName?.Text
+                                "Fout bij converteren root ExpandedNodeId {ExpNodeId}",
+                                item.NodeId
                             );
                             continue;
                         }
@@ -883,8 +1070,9 @@ namespace Data_Logger.ViewModels
                                         item.DisplayName?.Text ?? "Unknown",
                                         item.NodeClass,
                                         _opcUaService,
-                                        _logger,
-                                        hasChildren
+                                        _specificLogger,
+                                        hasChildren,
+                                        true
                                     )
                                 )
                             );
@@ -894,24 +1082,27 @@ namespace Data_Logger.ViewModels
             }
             catch (Exception ex)
             {
-                _logger.Error(
+                _specificLogger.Error(
                     ex,
-                    "Fout bij het laden van de initiële address space voor {ConnectionName}",
+                    "Fout bij laden initiële address space voor {ConnectionName}",
                     DisplayName
                 );
                 _statusService.SetStatus(
                     ApplicationStatus.Error,
-                    $"Fout bij laden address space: {ex.Message}"
+                    $"Fout laden address space: {ex.Message}"
                 );
             }
             finally
             {
-                IsBrowseAddressSpace = false;
+                IsBrowseAddressSpaceProcessing = false;
             }
         }
         #endregion
 
         #region Node Details Logic
+        /// <summary>
+        /// Laadt asynchroon de details (attributen en referenties) van de <see cref="SelectedOpcUaNodeInTree"/>.
+        /// </summary>
         private async Task LoadSelectedNodeDetailsAsync()
         {
             if (
@@ -924,97 +1115,133 @@ namespace Data_Logger.ViewModels
                 {
                     SelectedNodeAttributes.Clear();
                     SelectedNodeReferences.Clear();
+                    IsLoadingNodeDetails = false;
                 });
                 return;
             }
-            IsLoadingNodeDetails = true;
-            _logger.Information(
-                "Laden van details voor geselecteerde node: {NodeId}",
-                SelectedOpcUaNodeInTree.NodeId
+
+            await Application.Current.Dispatcher.InvokeAsync(() => IsLoadingNodeDetails = true);
+
+            _specificLogger.Information(
+                "Laden van details voor geselecteerde node: {NodeId} ({ConnectionName})",
+                SelectedOpcUaNodeInTree.NodeId,
+                DisplayName
             );
+
+            List<NodeAttributeViewModel> newAttributes = null; // Tijdelijke collectie voor attributen
+            List<ReferenceDescriptionViewModel> newReferencesVMs =
+                new List<ReferenceDescriptionViewModel>(); // Tijdelijke collectie voor referenties
+
             try
             {
-                var attributes = await _opcUaService.ReadNodeAttributesAsync(
+                var attributesTask = _opcUaService.ReadNodeAttributesAsync(
                     SelectedOpcUaNodeInTree.NodeId
                 );
-                Application.Current?.Dispatcher.Invoke(() =>
-                {
-                    SelectedNodeAttributes.Clear();
-                    foreach (var attr in attributes)
-                        SelectedNodeAttributes.Add(attr);
-                });
-                var references = await _opcUaService.BrowseAllReferencesAsync(
+                var referencesTask = _opcUaService.BrowseAllReferencesAsync(
                     SelectedOpcUaNodeInTree.NodeId
                 );
-                Application.Current?.Dispatcher.Invoke(() =>
-                {
-                    SelectedNodeReferences.Clear();
-                    if (references != null)
-                    {
-                        var nsUris = _opcUaService.NamespaceUris;
-                        foreach (var rd in references)
-                        {
-                            NodeId targetId = null;
-                            NodeId refTypeIdNode = null;
-                            try
-                            {
-                                targetId = ExpandedNodeId.ToNodeId(rd.NodeId, nsUris);
-                            }
-                            catch
-                            { /* ignore */
-                            }
-                            try
-                            {
-                                refTypeIdNode = ExpandedNodeId.ToNodeId(rd.ReferenceTypeId, nsUris);
-                            }
-                            catch
-                            { /* ignore */
-                            }
+                await Task.WhenAll(attributesTask, referencesTask).ConfigureAwait(false);
 
-                            if (targetId != null && refTypeIdNode != null)
+                newAttributes = await attributesTask.ConfigureAwait(false);
+                var references = await referencesTask.ConfigureAwait(false);
+
+                if (references != null)
+                {
+                    var nsUris = _opcUaService.NamespaceUris; // Eenmalig ophalen
+                    foreach (var rd in references)
+                    {
+                        NodeId targetId = null;
+                        NodeId refTypeIdNode = null;
+
+                        try
+                        {
+                            targetId = ExpandedNodeId.ToNodeId(rd.NodeId, nsUris);
+                        }
+                        catch (Exception ex)
+                        {
+                            _specificLogger.Warning(
+                                ex,
+                                "Kon target NodeId {Node} niet parsen voor referentie. Referentie wordt overgeslagen.",
+                                rd.NodeId
+                            );
+                            continue; // Ga naar de volgende referentie
+                        }
+
+                        try
+                        {
+                            refTypeIdNode = ExpandedNodeId.ToNodeId(rd.ReferenceTypeId, nsUris);
+                        }
+                        catch (Exception ex)
+                        {
+                            _specificLogger.Warning(
+                                ex,
+                                "Kon referentie type NodeId {Node} niet parsen. Referentie wordt overgeslagen.",
+                                rd.ReferenceTypeId
+                            );
+                            continue; // Ga naar de volgende referentie
+                        }
+
+                        string refTypeDisp = refTypeIdNode.ToString(); // Fallback waarde
+                        if (refTypeIdNode != null && !refTypeIdNode.IsNullNodeId) // Controleer of het een valide NodeId is
+                        {
+                            // Roep ReadNodeDisplayNameAsync asynchroon aan en wacht erop
+                            var localizedText = await _opcUaService
+                                .ReadNodeDisplayNameAsync(refTypeIdNode)
+                                .ConfigureAwait(false);
+                            if (localizedText != null && !string.IsNullOrEmpty(localizedText.Text))
                             {
-                                string refTypeDisp =
-                                    (
-                                        _opcUaService.NamespaceUris != null
-                                            ? _opcUaService
-                                                .ReadNodeDisplayNameAsync(refTypeIdNode)
-                                                .Result?.Text
-                                            : null
-                                    ) ?? refTypeIdNode.ToString();
-                                SelectedNodeReferences.Add(
-                                    new ReferenceDescriptionViewModel(
-                                        rd,
-                                        refTypeIdNode,
-                                        refTypeDisp,
-                                        rd.IsForward,
-                                        targetId
-                                    )
-                                );
+                                refTypeDisp = localizedText.Text;
                             }
                         }
+                        newReferencesVMs.Add(
+                            new ReferenceDescriptionViewModel(
+                                rd,
+                                refTypeDisp,
+                                rd.IsForward,
+                                targetId
+                            )
+                        );
                     }
+                }
+
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    SelectedNodeAttributes.Clear();
+                    if (newAttributes != null)
+                    {
+                        foreach (var attr in newAttributes)
+                            SelectedNodeAttributes.Add(attr);
+                    }
+
+                    SelectedNodeReferences.Clear();
+                    foreach (var refVM in newReferencesVMs)
+                        SelectedNodeReferences.Add(refVM);
                 });
             }
             catch (Exception ex)
             {
-                _logger.Error(
+                _specificLogger.Error(
                     ex,
-                    "Fout bij het laden van node details voor {NodeId}",
-                    SelectedOpcUaNodeInTree.NodeId
+                    "Fout bij laden node details voor {NodeId} ({ConnectionName})",
+                    SelectedOpcUaNodeInTree.NodeId,
+                    DisplayName
                 );
-                _statusService.SetStatus(
-                    ApplicationStatus.Error,
-                    $"Fout bij laden node details: {ex.Message}"
-                );
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    SelectedNodeAttributes.Clear();
+                    SelectedNodeReferences.Clear();
+                });
             }
             finally
             {
-                IsLoadingNodeDetails = false;
+                await Application.Current.Dispatcher.InvokeAsync(() => IsLoadingNodeDetails = false
+                );
             }
         }
         #endregion
 
         #region Monitoring Configuration from TreeView / List
+        /// <summary> Bepaalt of de opgegeven node aan monitoring toegevoegd kan worden. </summary>
         private bool CanAddNodeToMonitoring(OpcUaNodeViewModel node)
         {
             if (node == null)
@@ -1026,11 +1253,13 @@ namespace Data_Logger.ViewModels
             return isCorrectNodeClass && !isAlreadyMonitored;
         }
 
+        /// <summary> Bepaalt of de opgegeven node uit monitoring verwijderd kan worden. </summary>
         private bool CanRemoveNodeFromMonitoring(OpcUaNodeViewModel node)
         {
             return node != null && IsNodeCurrentlyMonitored(node.NodeId);
         }
 
+        /// <summary> Controleert of een NodeId momenteel gemonitord wordt. </summary>
         private bool IsNodeCurrentlyMonitored(NodeId nodeId)
         {
             if (nodeId == null || OpcUaConfig?.TagsToMonitor == null)
@@ -1040,6 +1269,7 @@ namespace Data_Logger.ViewModels
             );
         }
 
+        /// <summary> Voegt de opgegeven node toe aan de monitoring lijst. </summary>
         private void AddNodeToMonitoring(OpcUaNodeViewModel nodeToAdd)
         {
             if (nodeToAdd == null || !CanAddNodeToMonitoring(nodeToAdd))
@@ -1060,8 +1290,10 @@ namespace Data_Logger.ViewModels
             };
             newTagConfig.ResetBaselineState();
 
-            OpcUaConfig.TagsToMonitor.Add(newTagConfig);
-            _logger.Information(
+            if (OpcUaConfig != null)
+                if (OpcUaConfig.TagsToMonitor != null)
+                    OpcUaConfig.TagsToMonitor.Add(newTagConfig);
+            _specificLogger.Information(
                 "Tag {NodeId} ({DisplayName}) toegevoegd aan monitoring.",
                 newTagConfig.NodeId,
                 newTagConfig.TagName
@@ -1074,6 +1306,7 @@ namespace Data_Logger.ViewModels
             UpdateCommandStates();
         }
 
+        /// <summary> Verwijdert de opgegeven node uit de monitoring lijst. </summary>
         private void RemoveNodeFromMonitoring(OpcUaNodeViewModel nodeToRemove)
         {
             if (nodeToRemove == null || !CanRemoveNodeFromMonitoring(nodeToRemove))
@@ -1084,7 +1317,7 @@ namespace Data_Logger.ViewModels
             if (tagToRemove != null)
             {
                 OpcUaConfig.TagsToMonitor.Remove(tagToRemove);
-                _logger.Information(
+                _specificLogger.Information(
                     "Tag {NodeId} ({DisplayName}) verwijderd uit monitoring.",
                     nodeToRemove.NodeId,
                     nodeToRemove.DisplayName
@@ -1098,6 +1331,7 @@ namespace Data_Logger.ViewModels
             }
         }
 
+        /// <summary> Verwijdert de opgegeven tagconfiguratie uit de monitoring lijst. </summary>
         private void UnmonitorTag(OpcUaTagConfig tagConfig)
         {
             if (
@@ -1106,7 +1340,7 @@ namespace Data_Logger.ViewModels
                 || !OpcUaConfig.TagsToMonitor.Contains(tagConfig)
             )
                 return;
-            _logger.Information(
+            _specificLogger.Information(
                 "Stopt monitoring en verwijdert tag: {TagName} ({NodeId}) uit lijst.",
                 tagConfig.TagName,
                 tagConfig.NodeId
@@ -1121,6 +1355,7 @@ namespace Data_Logger.ViewModels
         #endregion
 
         #region Node Interaction Commands (Read Value)
+        /// <summary> Bepaalt of de waarde van de opgegeven node gelezen kan worden. </summary>
         private bool CanReadNodeValue(OpcUaNodeViewModel node)
         {
             if (node == null)
@@ -1132,6 +1367,7 @@ namespace Data_Logger.ViewModels
                 );
         }
 
+        /// <summary> Leest asynchroon de waarde van de opgegeven node. </summary>
         private async Task ReadNodeValueAsync(OpcUaNodeViewModel nodeToRead)
         {
             if (nodeToRead == null || !CanReadNodeValue(nodeToRead))
@@ -1140,7 +1376,7 @@ namespace Data_Logger.ViewModels
                     "Kan waarde niet lezen (geen node/verbinding/verkeerde klasse).";
                 return;
             }
-            _logger.Information(
+            _specificLogger.Information(
                 "Lezen van waarde voor geselecteerde node: {NodeId}",
                 nodeToRead.NodeId
             );
@@ -1156,7 +1392,7 @@ namespace Data_Logger.ViewModels
                     LastReadNodeValueMessage = StatusCode.IsGood(dataValue.StatusCode)
                         ? $"Waarde: {dataValue.Value?.ToString() ?? "null"} @ {dataValue.SourceTimestamp.ToLocalTime():HH:mm:ss.fff} (Kwaliteit: Goed)"
                         : $"Fout bij lezen: {dataValue.StatusCode}";
-                    _logger.Information(
+                    _specificLogger.Information(
                         "Waarde gelezen voor {NodeId}: {Value}, Status: {StatusCode}",
                         nodeToRead.NodeId,
                         dataValue.Value,
@@ -1166,7 +1402,7 @@ namespace Data_Logger.ViewModels
                 else
                 {
                     LastReadNodeValueMessage = "Geen waarde object (null) ontvangen.";
-                    _logger.Warning(
+                    _specificLogger.Warning(
                         "Geen DataValue object ontvangen bij lezen van {NodeId}",
                         nodeToRead.NodeId
                     );
@@ -1175,7 +1411,7 @@ namespace Data_Logger.ViewModels
             catch (Exception ex)
             {
                 LastReadNodeValueMessage = $"Exception: {ex.Message}";
-                _logger.Error(
+                _specificLogger.Error(
                     ex,
                     "Exception bij lezen van geselecteerde node {NodeId}",
                     nodeToRead.NodeId
@@ -1184,17 +1420,18 @@ namespace Data_Logger.ViewModels
             _statusService.SetStatus(ApplicationStatus.Idle, "Klaar met lezen.");
         }
 
+        /// <summary> Leest asynchroon de huidige waarden van alle geconfigureerde tags. </summary>
         private async Task ReadAllConfiguredTagsAsync()
         {
             if (!IsConnected || OpcUaConfig == null)
             {
-                _logger.Warning(
+                _specificLogger.Warning(
                     "Kan geconfigureerde tags niet lezen, niet verbonden: {DisplayName}",
                     DisplayName
                 );
                 return;
             }
-            _logger.Information(
+            _specificLogger.Information(
                 "Eenmalige leesactie voor geconfigureerde tags gestart voor {DisplayName}",
                 DisplayName
             );
@@ -1212,6 +1449,7 @@ namespace Data_Logger.ViewModels
         #endregion
 
         #region Plotting Commands & Logic
+        /// <summary> Bepaalt of een nieuwe plot-tab geopend kan worden voor de geselecteerde/gegeven tag. </summary>
         private bool CanExecuteOpenNewPlotTabForSelected(object parameter)
         {
             if (parameter is OpcUaTagConfig tagParam)
@@ -1228,6 +1466,7 @@ namespace Data_Logger.ViewModels
             return false;
         }
 
+        /// <summary> Opent een nieuwe plot-tab voor de geselecteerde/gegeven tag. </summary>
         private void ExecuteOpenNewPlotTabForSelected(object parameter)
         {
             OpcUaTagConfig tagToPlot = null;
@@ -1242,7 +1481,7 @@ namespace Data_Logger.ViewModels
                 );
                 if (tagToPlot == null)
                 {
-                    _logger.Warning(
+                    _specificLogger.Warning(
                         "ExecuteOpenNewPlotTabForSelected: Geselecteerde node '{SelectedNode}' is geen actieve, gemonitorde tag.",
                         SelectedOpcUaNodeInTree.DisplayName
                     );
@@ -1258,7 +1497,7 @@ namespace Data_Logger.ViewModels
 
             if (tagToPlot != null && tagToPlot.IsActive)
             {
-                _logger.Debug(
+                _specificLogger.Debug(
                     "ExecuteOpenNewPlotTabForSelected: Roept ExecuteAddTagToPlot aan voor tag '{TagName}'",
                     tagToPlot.TagName
                 );
@@ -1266,17 +1505,19 @@ namespace Data_Logger.ViewModels
             }
             else
             {
-                _logger.Warning(
+                _specificLogger.Warning(
                     "Kan geen plot tab openen: geen geschikte actieve tag geselecteerd of gevonden."
                 );
             }
         }
 
+        /// <summary> Bepaalt of een tag aan een plot toegevoegd kan worden. </summary>
         private bool CanExecuteAddTagToPlotParameter(object parameter)
         {
             return parameter is OpcUaTagConfig tagConfig && tagConfig.IsActive;
         }
 
+        /// <summary> Voegt een tag (vanuit lijst) toe aan een nieuwe of bestaande plot. </summary>
         private void ExecuteAddTagToPlot(object parameter)
         {
             if (parameter is OpcUaTagConfig tagConfig)
@@ -1289,12 +1530,12 @@ namespace Data_Logger.ViewModels
                     var newPlotTab = new PlotTabViewModel(
                         tagConfig.NodeId,
                         $"{tagConfig.TagName}",
-                        RemovePlotTab /*, _logger.ForContext("PlotContext", tagConfig.TagName) */
+                        RemovePlotTab
                     );
                     newPlotTab.EnsureSeriesExists(tagConfig.TagName, tagConfig.TagName);
                     ActivePlotTabs.Add(newPlotTab);
                     SelectedPlotTab = newPlotTab;
-                    _logger.Information(
+                    _specificLogger.Information(
                         "Nieuwe plot tab geopend voor OPC UA Tag: {TagName} ({NodeId})",
                         tagConfig.TagName,
                         tagConfig.NodeId
@@ -1302,14 +1543,14 @@ namespace Data_Logger.ViewModels
                 }
                 else
                 {
-                    _logger.Information(
+                    _specificLogger.Information(
                         "ExecuteAddTagToPlot: Bestaande plot tab geselecteerd voor primaire NodeId: {NodeId}. Zorgen dat series '{TagName}' bestaat.",
                         tagConfig.NodeId,
                         tagConfig.TagName
                     );
                     SelectedPlotTab = existingPlotTab;
                     SelectedPlotTab.EnsureSeriesExists(tagConfig.TagName, tagConfig.TagName);
-                    _logger.Information(
+                    _specificLogger.Information(
                         "Bestaande plot tab geselecteerd voor OPC UA Tag: {TagName} ({NodeId})",
                         tagConfig.TagName,
                         tagConfig.NodeId
@@ -1318,6 +1559,7 @@ namespace Data_Logger.ViewModels
             }
         }
 
+        /// <summary> Bepaalt of de geselecteerde node/tag aan de huidige plot toegevoegd kan worden. </summary>
         private bool CanExecuteAddSelectedTagToCurrentPlot(object parameter)
         {
             OpcUaTagConfig tagConfigToAdd = null;
@@ -1327,11 +1569,9 @@ namespace Data_Logger.ViewModels
                 tagConfigToAdd = OpcUaConfig?.TagsToMonitor.FirstOrDefault(t =>
                     t.NodeId == SelectedOpcUaNodeInTree.NodeId.ToString()
                 );
-            
 
             if (SelectedPlotTab != null && tagConfigToAdd != null && tagConfigToAdd.IsActive)
             {
-                
                 return !SelectedPlotTab.PlotModel.Series.Any(s =>
                     s.Title == tagConfigToAdd.TagName
                 );
@@ -1339,6 +1579,7 @@ namespace Data_Logger.ViewModels
             return false;
         }
 
+        /// <summary> Voegt de geselecteerde node/tag toe aan de huidige plot. </summary>
         private void ExecuteAddSelectedTagToCurrentPlot(object parameter)
         {
             OpcUaTagConfig tagConfigToAdd = null;
@@ -1351,56 +1592,80 @@ namespace Data_Logger.ViewModels
                 tagConfigToAdd = OpcUaConfig?.TagsToMonitor.FirstOrDefault(t =>
                     t.NodeId == SelectedOpcUaNodeInTree.NodeId.ToString()
                 );
-                
+
                 if (tagConfigToAdd == null)
                 {
-                    _logger.Warning("ExecuteAddSelectedTagToCurrentPlot: Geselecteerde node '{SelectedNode}' is geen actieve, gemonitorde tag.", SelectedOpcUaNodeInTree.DisplayName);
-                    MessageBox.Show($"Node '{SelectedOpcUaNodeInTree.DisplayName}' wordt niet actief gemonitord. Voeg het eerst toe aan monitoring.", "Tag niet gemonitord", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    _specificLogger.Warning(
+                        "ExecuteAddSelectedTagToCurrentPlot: Geselecteerde node '{SelectedNode}' is geen actieve, gemonitorde tag.",
+                        SelectedOpcUaNodeInTree.DisplayName
+                    );
+                    MessageBox.Show(
+                        $"Node '{SelectedOpcUaNodeInTree.DisplayName}' wordt niet actief gemonitord. Voeg het eerst toe aan monitoring.",
+                        "Tag niet gemonitord",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning
+                    );
                     return;
                 }
             }
-                
-            
 
             if (SelectedPlotTab != null && tagConfigToAdd != null && tagConfigToAdd.IsActive)
             {
                 if (SelectedPlotTab.PlotModel.Series.Any(s => s.Title == tagConfigToAdd.TagName))
                 {
-                    _logger.Information("Tag '{TagName}' is al aanwezig in de huidige plot tab '{PlotTabTitle}'.", tagConfigToAdd.TagName, SelectedPlotTab.Header);
-                    MessageBox.Show($"Tag '{tagConfigToAdd.TagName}' is al aanwezig in deze grafiek.", "Tag al geplot", MessageBoxButton.OK, MessageBoxImage.Information);
+                    _specificLogger.Information(
+                        "Tag '{TagName}' is al aanwezig in de huidige plot tab '{PlotTabTitle}'.",
+                        tagConfigToAdd.TagName,
+                        SelectedPlotTab.Header
+                    );
+                    MessageBox.Show(
+                        $"Tag '{tagConfigToAdd.TagName}' is al aanwezig in deze grafiek.",
+                        "Tag al geplot",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information
+                    );
                     return;
                 }
-                
-                _logger.Information(
+
+                _specificLogger.Information(
                     "Voegt tag '{TagName}' als series toe aan de huidige plot tab '{PlotTabTitle}'",
                     tagConfigToAdd.TagName,
                     SelectedPlotTab.Header
                 );
-                SelectedPlotTab.EnsureSeriesExists(tagConfigToAdd.TagName, tagConfigToAdd.TagName); 
-                
-                
+                SelectedPlotTab.EnsureSeriesExists(tagConfigToAdd.TagName, tagConfigToAdd.TagName);
+
                 SelectedPlotTab.EnsureSeriesExists(tagConfigToAdd.TagName, tagConfigToAdd.TagName);
                 (AddSelectedTagToCurrentPlotCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
             else
             {
                 if (SelectedPlotTab == null)
-                    _logger.Warning("ExecuteAddSelectedTagToCurrentPlot: Geen actieve plot tab geselecteerd.");
+                    _specificLogger.Warning(
+                        "ExecuteAddSelectedTagToCurrentPlot: Geen actieve plot tab geselecteerd."
+                    );
                 else if (tagConfigToAdd == null)
-                    _logger.Warning("ExecuteAddSelectedTagToCurrentPlot: Geen tag geselecteerd om toe te voegen.");
+                    _specificLogger.Warning(
+                        "ExecuteAddSelectedTagToCurrentPlot: Geen tag geselecteerd om toe te voegen."
+                    );
                 else if (!tagConfigToAdd.IsActive)
-                    _logger.Warning("ExecuteAddSelectedTagToCurrentPlot: Geselecteerde tag '{TagName}' is niet actief.",
-                        tagConfigToAdd.TagName);
+                    _specificLogger.Warning(
+                        "ExecuteAddSelectedTagToCurrentPlot: Geselecteerde tag '{TagName}' is niet actief.",
+                        tagConfigToAdd.TagName
+                    );
             }
         }
 
+        /// <summary> Verwijdert de opgegeven plot-tab. </summary>
         private void RemovePlotTab(PlotTabViewModel plotTabToRemove)
         {
             if (plotTabToRemove != null && ActivePlotTabs.Contains(plotTabToRemove))
             {
-                (plotTabToRemove as IDisposable)?.Dispose();
+                (plotTabToRemove as IDisposable).Dispose();
                 ActivePlotTabs.Remove(plotTabToRemove);
-                _logger.Information("Plot tab gesloten voor: {Header}", plotTabToRemove.Header);
+                _specificLogger.Information(
+                    "Plot tab gesloten voor: {Header}",
+                    plotTabToRemove.Header
+                );
                 if (SelectedPlotTab == plotTabToRemove)
                 {
                     SelectedPlotTab = ActivePlotTabs.FirstOrDefault();
@@ -1410,6 +1675,10 @@ namespace Data_Logger.ViewModels
         #endregion
 
         #region UI Update and Dispose
+        /// <summary>
+        /// Werkt de CanExecute status van alle commando's bij.
+        /// Moet aangeroepen worden wanneer condities veranderen die de uitvoerbaarheid beïnvloeden.
+        /// </summary>
         private void UpdateCommandStates()
         {
             Application.Current?.Dispatcher.Invoke(() =>
@@ -1424,38 +1693,59 @@ namespace Data_Logger.ViewModels
                 (UnmonitorTagFromListCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (OpenNewPlotTabCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (AddTagToPlotCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (AddSelectedTagToCurrentPlotCommand as RelayCommand)?.RaiseCanExecuteChanged();
             });
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             Dispose(disposing: true);
             GC.SuppressFinalize(this);
         }
 
-        protected virtual void Dispose(bool disposing)
+        /// <summary>
+        /// Geeft beheerde en onbeheerde resources vrij die door de <see cref="OpcUaTabViewModel"/> worden gebruikt.
+        /// </summary>
+        /// <param name="disposing">True om zowel beheerde als onbeheerde resources vrij te geven; false om alleen onbeheerde resources vrij te geven.</param>
+        private void Dispose(bool disposing)
         {
             if (!_disposedValue)
             {
                 if (disposing)
                 {
-                    _logger.Debug(
+                    _specificLogger.Debug(
                         "Dispose(true) aangeroepen voor OpcUaTabViewModel: {ConnectionName}",
                         DisplayName
                     );
+
+                    // Unsubscribe van service events
                     if (_opcUaService != null)
                     {
                         _opcUaService.ConnectionStatusChanged -= OnOpcUaConnectionStatusChanged;
                         _opcUaService.TagsDataReceived -= OnOpcUaTagsDataReceived;
-                        _opcUaService.Dispose();
+                        _opcUaService.Dispose(); // Dispose de service
                     }
-                    Application.Current?.Dispatcher.Invoke(() =>
+
+                    // Ruim plot tabs op (elke PlotTabViewModel is IDisposable)
+                    if (
+                        Application.Current?.Dispatcher != null
+                        && !Application.Current.Dispatcher.CheckAccess()
+                    )
                     {
-                        RootNodes?.Clear();
-                        SelectedNodeAttributes?.Clear();
-                        SelectedNodeReferences?.Clear();
-                        ActivePlotTabs?.Clear();
-                    });
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            foreach (var plotTab in ActivePlotTabs.ToList())
+                                RemovePlotTab(plotTab);
+                            ActivePlotTabs.Clear();
+                        });
+                    }
+                    else
+                    {
+                        foreach (var plotTab in ActivePlotTabs.ToList())
+                            RemovePlotTab(plotTab);
+                        ActivePlotTabs.Clear();
+                    }
                 }
                 _disposedValue = true;
             }

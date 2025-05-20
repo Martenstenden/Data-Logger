@@ -1,22 +1,21 @@
 ﻿using System.Globalization;
 using System.Threading;
+using Data_Logger.Enums;
+using Data_Logger.Models;
+using Moq;
+using NUnit.Framework;
 using NUnit.Framework.Legacy;
+using Serilog;
 
 namespace DataLogger.Tests
 {
-    using Data_Logger.Enums;
-    using Data_Logger.Models;
-    using Moq;
-    using NUnit.Framework;
-    using Serilog;
-
     [TestFixture]
     [Category("Unit")]
     public class OpcUaTagConfigTests
     {
         private Mock<ILogger> _mockLogger;
         private OpcUaTagConfig _tagConfig;
-        
+
         private CultureInfo _originalCulture;
         private CultureInfo _originalUiCulture;
 
