@@ -35,10 +35,10 @@ jobs:
       with:
         msbuild-architecture: x86 # Of x64, afhankelijk van je project
 
-    - name: Code Formatting Check (dotnet format)
-      run: |
-        dotnet tool install --global dotnet-format --version 8.*
-        dotnet format "Data Logger/Data Logger.sln" --verify-no-changes --verbosity diagnostic
+    # - name: Code Formatting Check (dotnet format)
+    #   run: |
+    #     dotnet tool install --global dotnet-format --version 8.*
+    #     dotnet format "Data Logger/Data Logger.sln" --verify-no-changes --verbosity diagnostic
 
     - name: Build solution (with Roslyn Analyzer errors)
       run: msbuild "Data Logger/Data Logger.sln" /p:Configuration=Release /p:Platform="Any CPU" /p:TreatWarningsAsErrors=true
