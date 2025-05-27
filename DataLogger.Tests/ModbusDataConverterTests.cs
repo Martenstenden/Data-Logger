@@ -180,37 +180,37 @@ namespace DataLogger.Tests
             );
         }
 
-        // [Test]
-        // public void InterpretRegisterData_UnsupportedDataType_ReturnsFirstRegisterValueAndLogsWarning()
-        // {
-        //     var registers = new ushort[] { 9876, 5432 };
-        //     var unsupportedDataType = (ModbusDataType)99;
-        //
-        //     object result = ModbusDataConverter.InterpretRegisterData(
-        //         registers,
-        //         unsupportedDataType,
-        //         _mockLogger.Object
-        //     );
-        //
-        //     ClassicAssert.IsInstanceOf<ushort>(
-        //         result,
-        //         "Resultaat zou een ushort moeten zijn (fallback)."
-        //     );
-        //     ClassicAssert.AreEqual(
-        //         registers[0],
-        //         (ushort)result,
-        //         "Zou de waarde van het eerste register moeten retourneren."
-        //     );
-        //
-        //     _mockLogger.Verify(
-        //         log =>
-        //             log.Warning(
-        //                 "Niet-ondersteund ModbusDataType voor interpretatie: {DataType}. Probeert ruwe ushort[0] terug te geven.",
-        //                 It.Is<ModbusDataType>(dt => dt == unsupportedDataType)
-        //             ),
-        //         Times.Once
-        //     );
-        // }
+        [Test]
+        public void InterpretRegisterData_UnsupportedDataType_ReturnsFirstRegisterValueAndLogsWarning()
+        {
+            var registers = new ushort[] { 9876, 5432 };
+            var unsupportedDataType = (ModbusDataType)99;
+
+            object result = ModbusDataConverter.InterpretRegisterData(
+                registers,
+                unsupportedDataType,
+                _mockLogger.Object
+            );
+
+            ClassicAssert.IsInstanceOf<ushort>(
+                result,
+                "Resultaat zou een ushort moeten zijn (fallback)."
+            );
+            ClassicAssert.AreEqual(
+                registers[0],
+                (ushort)result,
+                "Zou de waarde van het eerste register moeten retourneren."
+            );
+
+            _mockLogger.Verify(
+                log =>
+                    log.Warning(
+                        "Niet-ondersteund ModbusDataType voor interpretatie: {DataType}. Probeert ruwe ushort[0] terug te geven.",
+                        It.Is<ModbusDataType>(dt => dt == unsupportedDataType)
+                    ),
+                Times.Once
+            );
+        }
 
         [Test]
         public void InterpretRegisterData_UnsupportedDataType_EmptyRegisters_ThrowsArgumentException()

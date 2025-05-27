@@ -43,9 +43,8 @@ namespace DataLogger.Tests.IntegrationTests
         public void GlobalSetup()
         {
             _testLogger = new LoggerConfiguration()
-                .MinimumLevel.Verbose() // Of een ander gewenst niveau
+                .MinimumLevel.Verbose()
                 .WriteTo.Console()
-                // .WriteTo.File("logs/DataLogger_IntegrationTests_.txt", rollingInterval: RollingInterval.Day) // Optioneel: loggen naar een bestand
                 .CreateLogger();
 
             if (_isCiEnvironment)
@@ -148,7 +147,6 @@ namespace DataLogger.Tests.IntegrationTests
         }
 
         [SetUp]
-        [Obsolete("Obsolete")]
         public void PerTestSetup()
         {
             TestContext.Progress.WriteLine(
@@ -250,9 +248,7 @@ namespace DataLogger.Tests.IntegrationTests
             }
             catch (Exception ex)
             {
-                Assert.Fail(
-                    $"ConnectAsync gooide een exception: {ex.Message} - {ex.StackTrace}"
-                );
+                Assert.Fail($"ConnectAsync gooide een exception: {ex.Message} - {ex.StackTrace}");
             }
 
             ClassicAssert.IsTrue(connected, "Verbinding met reference server zou moeten slagen.");
@@ -463,7 +459,8 @@ namespace DataLogger.Tests.IntegrationTests
                 $"Lokaal: Container {DockerTestHelper.DockerContainerName} gestart."
             );
 
-            bool portInUse = IPGlobalProperties.GetIPGlobalProperties()
+            bool portInUse = IPGlobalProperties
+                .GetIPGlobalProperties()
                 .GetActiveTcpListeners()
                 .Any(p => p.Port == 62541);
             ClassicAssert.IsTrue(
@@ -480,7 +477,8 @@ namespace DataLogger.Tests.IntegrationTests
             );
 
             Thread.Sleep(2000);
-            portInUse = IPGlobalProperties.GetIPGlobalProperties()
+            portInUse = IPGlobalProperties
+                .GetIPGlobalProperties()
                 .GetActiveTcpListeners()
                 .Any(p => p.Port == 62541);
             ClassicAssert.IsFalse(

@@ -75,6 +75,7 @@ $excludeDirPatterns = @(
     '.sql'
     '.ruleset'
     '.editorconfig'
+    '.tex'
 )
 
 # Definieer hier SPECIFIEKE BESTANDSNAMEN (exact, maar hoofdletterongevoelig) die WEL meegenomen moeten worden.
